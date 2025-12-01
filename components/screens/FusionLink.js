@@ -885,6 +885,8 @@ import { useDevice } from "../context/DeviceContext";
 import { useAdapter } from "@/api/contexts/DatabaseContext";
 
 import RNPickerSelect from "react-native-picker-select";
+// Agrega esta importación al inicio de FusionLink.js
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const FusionLink = ({ route, navigation }) => {
   const adapter = useAdapter()();
@@ -1159,152 +1161,1061 @@ const FusionLink = ({ route, navigation }) => {
   };
 
   // 🔥 NUEVA FUNCIÓN MEJORADA PARA CARGAR FIBRAS
-  const loadProjectFibers = async () => {
-    try {
-      setIsLoading(true);
-      console.log('🔷 FusionLink - Iniciando carga de fibras para proyecto:', projectId);
+  // const loadProjectFibers = async () => {
+  //   try {
+  //     setIsLoading(true);
+  //     console.log('🔷 FusionLink - Iniciando carga de fibras para proyecto:', projectId);
 
-      // VERIFICACIÓN CRÍTICA DE PROJECTID
-      if (!projectId) {
-        console.error('❌ FusionLink - NO HAY PROJECTID VÁLIDO');
-        Alert.alert("Error", "No se pudo identificar el proyecto");
-        setFibersData([]);
-        setIsLoading(false);
-        return;
+  //     // VERIFICACIÓN CRÍTICA DE PROJECTID
+  //     if (!projectId) {
+  //       console.error('❌ FusionLink - NO HAY PROJECTID VÁLIDO');
+  //       Alert.alert("Error", "No se pudo identificar el proyecto");
+  //       setFibersData([]);
+  //       setIsLoading(false);
+  //       return;
+  //     }
+
+  //     // Obtener todas las fibras del proyecto (main fibers con parentFiberId = null)
+  //     let mainFibers = await getFibersByProjectId(projectId, null);
+  //     console.log('🔷 FusionLink - Fibras principales obtenidas:', mainFibers?.length || 0);
+
+  //     if (!mainFibers || mainFibers.length === 0) {
+  //       console.log('🔷 FusionLink - No se encontraron fibras principales');
+  //       setFibersData([]);
+  //       setIsLoading(false);
+  //       return;
+  //     }
+
+  //     // PROCESAR CADA FIBRA PRINCIPAL Y SUS BUFFERS
+  //     const processedFibers = [];
+
+  //     for (const mainFiber of mainFibers) {
+  //       try {
+  //         console.log(`🔷 Procesando fibra: ${mainFiber.label} (ID: ${mainFiber.id})`);
+
+  //         // Parsear metadata de la fibra principal
+  //         let fiberMetadata = {};
+  //         if (mainFiber.metadata) {
+  //           try {
+  //             fiberMetadata = JSON.parse(mainFiber.metadata);
+  //             console.log(`   Metadata:`, fiberMetadata);
+  //           } catch (e) {
+  //             console.log(`   Error parsing metadata:`, e);
+  //           }
+  //         }
+
+  //         // Obtener threads de la fibra principal
+  //         const mainFiberThreads = fiberMetadata.threads || Array.from({length: 12}, (_, index) => ({
+  //           number: index + 1,
+  //           color: getColorByIndex(index),
+  //           active: true,
+  //           inUse: false
+  //         }));
+
+  //         // Crear objeto de fibra principal
+  //         const mainFiberObj = {
+  //           ...mainFiber,
+  //           value: mainFiber.id,
+  //           label: mainFiber.label,
+  //           key: `fiber-${mainFiber.id}`,
+  //           threads: mainFiberThreads,
+  //           isMainFiber: true,
+  //           buffers: [] // Inicializar array de buffers
+  //         };
+
+  //         // OBTENER BUFFERS (fibras hijas con parentFiberId = mainFiber.id)
+  //         let buffers = [];
+  //         try {
+  //           const childFibers = await getFibersByProjectId(projectId, mainFiber.id);
+  //           console.log(`   Buffers encontrados: ${childFibers?.length || 0}`);
+
+  //           if (childFibers && childFibers.length > 0) {
+  //             for (const bufferFiber of childFibers) {
+  //               // Parsear metadata del buffer
+  //               let bufferMetadata = {};
+  //               if (bufferFiber.metadata) {
+  //                 try {
+  //                   bufferMetadata = JSON.parse(bufferFiber.metadata);
+  //                 } catch (e) {
+  //                   console.log(`   Error parsing buffer metadata:`, e);
+  //                 }
+  //               }
+
+  //               // Obtener threads del buffer
+  //               const bufferThreads = bufferMetadata.threads || Array.from({length: 12}, (_, index) => ({
+  //                 number: index + 1,
+  //                 color: getColorByIndex(index),
+  //                 active: true,
+  //                 inUse: false
+  //               }));
+
+  //               const bufferObj = {
+  //                 ...bufferFiber,
+  //                 value: bufferFiber.id,
+  //                 label: bufferFiber.label,
+  //                 key: `buffer-${bufferFiber.id}`,
+  //                 threads: bufferThreads,
+  //                 isBuffer: true,
+  //                 parentFiberId: mainFiber.id
+  //               };
+
+  //               buffers.push(bufferObj);
+  //             }
+  //           }
+  //         } catch (error) {
+  //           console.error(`❌ Error cargando buffers para ${mainFiber.label}:`, error);
+  //         }
+
+  //         // Agregar la fibra principal como primer "buffer" (para selección)
+  //         const allBuffers = [
+  //           {
+  //             ...mainFiberObj,
+  //             label: `${mainFiber.label} (Principal)`,
+  //             isMainFiber: true
+  //           },
+  //           ...buffers
+  //         ];
+
+  //         mainFiberObj.buffers = allBuffers;
+  //         processedFibers.push(mainFiberObj);
+
+  //       } catch (error) {
+  //         console.error(`❌ Error procesando fibra ${mainFiber.label}:`, error);
+  //       }
+  //     }
+
+  //     console.log('🔷 FusionLink - Fibras procesadas exitosamente:', processedFibers.length);
+      
+  //     // APLICAR FILTRADO SEGÚN TIPO DE NODO
+  //     let filteredFibers = applyNodeFilter(processedFibers, node);
+  //     console.log('🔷 FusionLink - Fibras después del filtro:', filteredFibers.length);
+
+  //     setFibersData(filteredFibers);
+
+  //     // CARGAR DATOS EXISTENTES SI HAY UN LINK
+  //     if (link && filteredFibers.length > 0) {
+  //       console.log('🔷 Cargando datos del link existente');
+  //       loadExistingLinkData(filteredFibers);
+  //     }
+
+  //   } catch (error) {
+  //     console.error('❌ Error general cargando fibras:', error);
+  //     Alert.alert("Error", "No se pudieron cargar las fibras del proyecto");
+  //   } finally {
+  //     setIsLoading(false);
+  //   }
+  // };
+//   const loadProjectFibers = async () => {
+//   try {
+//     setIsLoading(true);
+//     console.log('🔷 FusionLink - Iniciando carga de fibras para proyecto:', projectId);
+
+//     // VERIFICACIÓN CRÍTICA DE PROJECTID
+//     if (!projectId) {
+//       console.error('❌ FusionLink - NO HAY PROJECTID VÁLIDO');
+//       Alert.alert("Error", "No se pudo identificar el proyecto");
+//       setFibersData([]);
+//       setIsLoading(false);
+//       return;
+//     }
+
+//     // 🔥 NUEVO MÉTODO: Obtener TODAS las fibras del proyecto sin filtrar por parentFiberId
+//     const loadAllProjectFibers = async (projectId) => {
+//       try {
+//         console.log('🔍 Buscando todas las fibras del proyecto:', projectId);
+        
+//         // 1. Obtener fibras principales (parentFiberId = null)
+//         const mainFibers = await getFibersByProjectId(projectId, null);
+//         console.log('🔍 Fibras principales encontradas:', mainFibers?.length || 0);
+        
+//         // 2. Obtener TODAS las fibras del proyecto (necesitamos modificar el adapter o crear nueva función)
+//         // Como alternativa, vamos a obtener también las fibras hijas por cada fibra principal
+//         const allFibers = [...(mainFibers || [])];
+        
+//         // 3. Para cada fibra principal, obtener sus buffers (fibras hijas)
+//         if (mainFibers && mainFibers.length > 0) {
+//           for (const fiber of mainFibers) {
+//             try {
+//               const childFibers = await getFibersByProjectId(projectId, fiber.id);
+//               if (childFibers && childFibers.length > 0) {
+//                 allFibers.push(...childFibers);
+//                 console.log(`🔍 Buffers para ${fiber.label}:`, childFibers.length);
+//               }
+//             } catch (error) {
+//               console.error(`❌ Error cargando buffers de ${fiber.label}:`, error);
+//             }
+//           }
+//         }
+        
+//         console.log('🔍 Total de fibras encontradas:', allFibers.length);
+        
+//         // DEBUG: Mostrar todas las fibras encontradas
+//         allFibers.forEach((fiber, index) => {
+//           console.log(`  ${index + 1}. ${fiber.label} (ID: ${fiber.id}, parent: ${fiber.parentFiberId}, nodeId: ${fiber.nodeId})`);
+//         });
+        
+//         return allFibers;
+        
+//       } catch (error) {
+//         console.error('❌ Error cargando todas las fibras:', error);
+//         return [];
+//       }
+//     };
+
+//     // Obtener TODAS las fibras del proyecto
+//     let allFibers = await loadAllProjectFibers(projectId);
+    
+//     if (!allFibers || allFibers.length === 0) {
+//       console.log('🔷 FusionLink - No se encontraron fibras en el almacenamiento');
+      
+//       // DEBUG: Verificar qué hay en AsyncStorage directamente
+//       try {
+//         // Esta es una función de depuración - puede que necesites importarla
+//         console.log('🔍 Intentando leer AsyncStorage directamente...');
+//         // Si tienes acceso al AsyncStorage, podrías hacer:
+//         // const allData = await AsyncStorage.getItem('@fiber_data');
+//         // console.log('🔍 Contenido de AsyncStorage:', allData);
+//       } catch (debugError) {
+//         console.error('❌ Error de depuración:', debugError);
+//       }
+      
+//       setFibersData([]);
+//       setIsLoading(false);
+//       return;
+//     }
+
+//     // 🔥 AGRUPAR FIBRAS POR HIERARQUÍA
+//     const fiberMap = new Map();
+//     const bufferMap = new Map();
+    
+//     // Separar fibras principales de buffers
+//     allFibers.forEach(fiber => {
+//       if (!fiber.parentFiberId) {
+//         // Es fibra principal
+//         fiberMap.set(fiber.id, {
+//           ...fiber,
+//           buffers: []
+//         });
+//       } else {
+//         // Es buffer (fibra hija)
+//         if (!bufferMap.has(fiber.parentFiberId)) {
+//           bufferMap.set(fiber.parentFiberId, []);
+//         }
+//         bufferMap.get(fiber.parentFiberId).push(fiber);
+//       }
+//     });
+    
+//     // 🔥 PROCESAR CADA FIBRA PRINCIPAL
+//     const processedFibers = [];
+    
+//     for (const [fiberId, mainFiber] of fiberMap) {
+//       try {
+//         console.log(`🔷 Procesando fibra: ${mainFiber.label} (ID: ${fiberId})`);
+        
+//         // Parsear metadata
+//         let fiberMetadata = {};
+//         if (mainFiber.metadata) {
+//           try {
+//             fiberMetadata = JSON.parse(mainFiber.metadata);
+//           } catch (e) {
+//             console.log(`   Error parsing metadata:`, e);
+//           }
+//         }
+        
+//         // Obtener threads
+//         const mainFiberThreads = fiberMetadata.threads || Array.from({length: 12}, (_, index) => ({
+//           number: index + 1,
+//           color: getColorByIndex(index),
+//           active: true,
+//           inUse: false
+//         }));
+        
+//         // Crear objeto de fibra principal
+//         const mainFiberObj = {
+//           ...mainFiber,
+//           value: mainFiber.id,
+//           label: mainFiber.label,
+//           key: `fiber-${mainFiber.id}`,
+//           threads: mainFiberThreads,
+//           isMainFiber: true,
+//           buffers: []
+//         };
+        
+//         // 🔥 AGREGAR BUFFERS DE ESTA FIBRA
+//         const buffers = bufferMap.get(fiberId) || [];
+//         const processedBuffers = [];
+        
+//         // La fibra principal también es una opción de selección
+//         processedBuffers.push({
+//           ...mainFiberObj,
+//           label: `${mainFiber.label} (Principal)`,
+//           isMainFiber: true,
+//           isBuffer: false
+//         });
+        
+//         // Procesar buffers reales (fibras hijas)
+//         if (buffers.length > 0) {
+//           for (const bufferFiber of buffers) {
+//             // Parsear metadata del buffer
+//             let bufferMetadata = {};
+//             if (bufferFiber.metadata) {
+//               try {
+//                 bufferMetadata = JSON.parse(bufferFiber.metadata);
+//               } catch (e) {
+//                 console.log(`   Error parsing buffer metadata:`, e);
+//               }
+//             }
+            
+//             // Obtener threads del buffer
+//             const bufferThreads = bufferMetadata.threads || Array.from({length: 12}, (_, index) => ({
+//               number: index + 1,
+//               color: getColorByIndex(index),
+//               active: true,
+//               inUse: false
+//             }));
+            
+//             const bufferObj = {
+//               ...bufferFiber,
+//               value: bufferFiber.id,
+//               label: bufferFiber.label || `Buffer ${processedBuffers.length}`,
+//               key: `buffer-${bufferFiber.id}`,
+//               threads: bufferThreads,
+//               isBuffer: true,
+//               isMainFiber: false,
+//               parentFiberId: fiberId
+//             };
+            
+//             processedBuffers.push(bufferObj);
+//           }
+//         }
+        
+//         mainFiberObj.buffers = processedBuffers;
+//         processedFibers.push(mainFiberObj);
+        
+//         console.log(`   Buffers procesados: ${processedBuffers.length - 1}`);
+        
+//       } catch (error) {
+//         console.error(`❌ Error procesando fibra ${mainFiber.label}:`, error);
+//       }
+//     }
+    
+//     console.log('🔷 FusionLink - Fibras procesadas exitosamente:', processedFibers.length);
+    
+//     // 🔥 APLICAR FILTRADO SEGÚN TIPO DE NODO
+//     let filteredFibers = applyNodeFilter(processedFibers, node);
+//     console.log('🔷 FusionLink - Fibras después del filtro:', filteredFibers.length);
+    
+//     // DEBUG: Mostrar las fibras filtradas
+//     if (filteredFibers.length > 0) {
+//       console.log('🔍 Fibras disponibles después del filtro:');
+//       filteredFibers.forEach((fiber, index) => {
+//         console.log(`  ${index + 1}. ${fiber.label} (Buffers: ${fiber.buffers?.length || 0})`);
+//       });
+//     }
+    
+//     setFibersData(filteredFibers);
+    
+//     // CARGAR DATOS EXISTENTES SI HAY UN LINK
+//     if (link && filteredFibers.length > 0) {
+//       console.log('🔷 Cargando datos del link existente');
+//       loadExistingLinkData(filteredFibers);
+//     }
+    
+//   } catch (error) {
+//     console.error('❌ Error general cargando fibras:', error);
+//     Alert.alert("Error", "No se pudieron cargar las fibras del proyecto");
+//   } finally {
+//     setIsLoading(false);
+//   }
+// };
+// 🔥 REEMPLAZA LA FUNCIÓN loadProjectFibers CON ESTA VERSIÓN CORREGIDA
+// const loadProjectFibers = async () => {
+//   try {
+//     setIsLoading(true);
+//     console.log('🔷 FusionLink - Iniciando carga de fibras para proyecto:', projectId);
+
+//     // VERIFICACIÓN CRÍTICA DE PROJECTID
+//     if (!projectId) {
+//       console.error('❌ FusionLink - NO HAY PROJECTID VÁLIDO');
+//       Alert.alert("Error", "No se pudo identificar el proyecto");
+//       setFibersData([]);
+//       setIsLoading(false);
+//       return;
+//     }
+
+//     // 🔥 PRIMERO: Buscar fibras usando el adapter
+//     console.log('🔍 1. Intentando con adapter.getFibersByProjectId...');
+//     let mainFibers = [];
+    
+//     try {
+//       mainFibers = await getFibersByProjectId(projectId, null);
+//       console.log('🔍 Fibras principales desde adapter:', mainFibers?.length || 0);
+//     } catch (adapterError) {
+//       console.error('❌ Error con adapter:', adapterError);
+//     }
+
+//     // 🔥 SEGUNDO: Si no hay fibras, buscar directamente en AsyncStorage
+//     if (!mainFibers || mainFibers.length === 0) {
+//       console.log('🔍 2. Adapter no encontró fibras, buscando directamente en AsyncStorage...');
+      
+//       try {
+//         // Obtener TODAS las claves de AsyncStorage
+//         const allKeys = await AsyncStorage.getAllKeys();
+        
+//         // Buscar claves que contengan "fiber" (case insensitive)
+//         const fiberKeys = allKeys.filter(key => 
+//           key.toLowerCase().includes('fiber')
+//         );
+        
+//         console.log('🔍 Claves de fibras encontradas:', fiberKeys);
+        
+//         // Buscar específicamente fibras de ESTE proyecto
+//         let projectFibers = [];
+        
+//         for (const key of fiberKeys) {
+//           try {
+//             const value = await AsyncStorage.getItem(key);
+//             if (value) {
+//               const fibers = JSON.parse(value);
+              
+//               if (Array.isArray(fibers)) {
+//                 // Filtrar fibras que pertenezcan a este proyecto
+//                 const fibersForThisProject = fibers.filter(fiber => {
+//                   // Verificar si la fibra tiene projectId
+//                   if (fiber.projectId === projectId) return true;
+                  
+//                   // O si la clave contiene el projectId
+//                   if (key.includes(projectId.toString())) return true;
+                  
+//                   return false;
+//                 });
+                
+//                 if (fibersForThisProject.length > 0) {
+//                   console.log(`🔍 Encontradas ${fibersForThisProject.length} fibras en clave: ${key}`);
+//                   projectFibers = [...projectFibers, ...fibersForThisProject];
+//                 }
+//               }
+//             }
+//           } catch (parseError) {
+//             console.error(`❌ Error parseando clave ${key}:`, parseError);
+//           }
+//         }
+        
+//         if (projectFibers.length > 0) {
+//           console.log(`🔍 Total de fibras encontradas en AsyncStorage: ${projectFibers.length}`);
+//           mainFibers = projectFibers.filter(fiber => !fiber.parentFiberId);
+          
+//           // Mostrar detalles
+//           mainFibers.forEach((fiber, index) => {
+//             console.log(`  ${index + 1}. ${fiber.label} (ID: ${fiber.id})`);
+//           });
+//         } else {
+//           console.log('🔍 No se encontraron fibras para este proyecto en AsyncStorage');
+//         }
+        
+//       } catch (storageError) {
+//         console.error('❌ Error buscando en AsyncStorage:', storageError);
+//       }
+//     }
+
+//     // 🔥 TERCERO: Si aún no hay fibras, buscar por "fiberConfig_" + projectId
+//     if (!mainFibers || mainFibers.length === 0) {
+//       console.log('🔍 3. Buscando en clave fiberConfig_...');
+      
+//       try {
+//         const fiberConfigKey = `fiberConfig_${projectId}`;
+//         const value = await AsyncStorage.getItem(fiberConfigKey);
+        
+//         if (value) {
+//           const fibers = JSON.parse(value);
+//           console.log(`🔍 Encontradas ${fibers?.length || 0} fibras en ${fiberConfigKey}`);
+          
+//           if (fibers && Array.isArray(fibers)) {
+//             mainFibers = fibers.filter(fiber => !fiber.parentFiberId);
+            
+//             // Mostrar detalles
+//             mainFibers.forEach((fiber, index) => {
+//               console.log(`  ${index + 1}. ${fiber.label} (ID: ${fiber.id})`);
+//             });
+//           }
+//         } else {
+//           console.log(`🔍 No existe la clave ${fiberConfigKey}`);
+//         }
+//       } catch (configError) {
+//         console.error('❌ Error buscando fiberConfig:', configError);
+//       }
+//     }
+
+//     // 🔥 CUARTO: Si aún no hay fibras, mostrar error específico
+//     if (!mainFibers || mainFibers.length === 0) {
+//       console.log('❌ NO SE ENCONTRARON FIBRAS PARA ESTE PROYECTO');
+//       console.log('🔍 ProjectID:', projectId);
+//       console.log('🔍 Razones posibles:');
+//       console.log('   - Las fibras se guardaron con una clave diferente');
+//       console.log('   - El proyecto no tiene fibras creadas');
+//       console.log('   - Las fibras se guardaron con otro formato');
+      
+//       setFibersData([]);
+//       setIsLoading(false);
+//       return;
+//     }
+
+//     console.log(`🔷 Procesando ${mainFibers.length} fibras principales...`);
+
+//     // 🔥 PROCESAR LAS FIBRAS
+//     const processedFibers = [];
+    
+//     for (const mainFiber of mainFibers) {
+//       try {
+//         console.log(`🔷 Procesando fibra: ${mainFiber.label || 'Sin nombre'}`);
+        
+//         // Parsear metadata
+//         let metadata = {};
+//         if (mainFiber.metadata) {
+//           try {
+//             if (typeof mainFiber.metadata === 'string') {
+//               metadata = JSON.parse(mainFiber.metadata);
+//             } else if (typeof mainFiber.metadata === 'object') {
+//               metadata = mainFiber.metadata;
+//             }
+//           } catch (e) {
+//             console.log(`   Error parsing metadata:`, e);
+//           }
+//         }
+        
+//         // Obtener threads
+//         const threads = metadata.threads || Array.from({length: 12}, (_, index) => ({
+//           number: index + 1,
+//           color: getColorByIndex(index),
+//           active: true,
+//           inUse: false
+//         }));
+        
+//         // 🔥 OBTENER BUFFERS DE ESTA FIBRA
+//         let buffers = [];
+//         try {
+//           // Intentar obtener buffers usando el adapter
+//           if (mainFiber.id) {
+//             const childFibers = await getFibersByProjectId(projectId, mainFiber.id);
+//             if (childFibers && childFibers.length > 0) {
+//               console.log(`   🔹 Encontrados ${childFibers.length} buffers`);
+//               buffers = childFibers;
+//             }
+//           }
+//         } catch (bufferError) {
+//           console.error(`   ❌ Error obteniendo buffers:`, bufferError);
+//         }
+        
+//         // Crear array de todos los buffers (incluyendo la fibra principal como opción)
+//         const allBuffers = [];
+        
+//         // La fibra principal como primera opción
+//         allBuffers.push({
+//           ...mainFiber,
+//           value: mainFiber.id,
+//           label: `${mainFiber.label} (Principal)`,
+//           key: `fiber-${mainFiber.id}`,
+//           threads: threads,
+//           isMainFiber: true,
+//           isBuffer: false
+//         });
+        
+//         // Agregar buffers reales
+//         if (buffers.length > 0) {
+//           for (const buffer of buffers) {
+//             // Parsear metadata del buffer
+//             let bufferMetadata = {};
+//             if (buffer.metadata) {
+//               try {
+//                 if (typeof buffer.metadata === 'string') {
+//                   bufferMetadata = JSON.parse(buffer.metadata);
+//                 } else if (typeof buffer.metadata === 'object') {
+//                   bufferMetadata = buffer.metadata;
+//                 }
+//               } catch (e) {
+//                 console.log(`   Error parsing buffer metadata:`, e);
+//               }
+//             }
+            
+//             // Obtener threads del buffer
+//             const bufferThreads = bufferMetadata.threads || Array.from({length: 12}, (_, index) => ({
+//               number: index + 1,
+//               color: getColorByIndex(index),
+//               active: true,
+//               inUse: false
+//             }));
+            
+//             const bufferObj = {
+//               ...buffer,
+//               value: buffer.id,
+//               label: buffer.label || `Buffer ${allBuffers.length}`,
+//               key: `buffer-${buffer.id}`,
+//               threads: bufferThreads,
+//               isBuffer: true,
+//               isMainFiber: false,
+//               parentFiberId: mainFiber.id
+//             };
+            
+//             allBuffers.push(bufferObj);
+//           }
+//         }
+        
+//         const fiberObj = {
+//           ...mainFiber,
+//           value: mainFiber.id,
+//           label: mainFiber.label,
+//           key: `fiber-${mainFiber.id}`,
+//           threads: threads,
+//           buffers: allBuffers,
+//           isMainFiber: true
+//         };
+        
+//         processedFibers.push(fiberObj);
+//         console.log(`   ✅ Procesada con ${allBuffers.length} elementos de selección`);
+        
+//       } catch (error) {
+//         console.error(`❌ Error procesando fibra:`, error);
+//       }
+//     }
+    
+//     console.log('🔷 Fibras procesadas exitosamente:', processedFibers.length);
+    
+//     // 🔥 APLICAR FILTRADO SEGÚN TIPO DE NODO
+//     let filteredFibers = applyNodeFilter(processedFibers, node);
+//     console.log('🔷 Fibras después del filtro:', filteredFibers.length);
+    
+//     // Mostrar las fibras disponibles
+//     if (filteredFibers.length > 0) {
+//       console.log('🔍 Fibras disponibles después del filtro:');
+//       filteredFibers.forEach((fiber, index) => {
+//         console.log(`  ${index + 1}. ${fiber.label} (Selecciones: ${fiber.buffers?.length || 0})`);
+//         if (fiber.buffers && fiber.buffers.length > 0) {
+//           fiber.buffers.forEach((buffer, idx) => {
+//             console.log(`     ${idx + 1}. ${buffer.label}`);
+//           });
+//         }
+//       });
+//     }
+    
+//     setFibersData(filteredFibers);
+    
+//     // CARGAR DATOS EXISTENTES SI HAY UN LINK
+//     if (link && filteredFibers.length > 0) {
+//       console.log('🔷 Cargando datos del link existente');
+//       loadExistingLinkData(filteredFibers);
+//     }
+    
+//   } catch (error) {
+//     console.error('❌ Error general cargando fibras:', error);
+//     Alert.alert("Error", "No se pudieron cargar las fibras del proyecto");
+//   } finally {
+//     setIsLoading(false);
+//   }
+// };
+const loadProjectFibers = async () => {
+  try {
+    setIsLoading(true);
+    console.log('🚨 === FUSIONLINK DEBUG COMPLETO ===');
+    console.log('🚨 ProjectID:', projectId);
+    console.log('🚨 Nodo:', node?.label);
+    console.log('🚨 Params completos:', JSON.stringify(route.params));
+
+    // 1. LISTAR TODAS LAS CLAVES DE ASYNCSTORAGE
+    console.log('🔍 PASO 1: Listando todas las claves...');
+    const allKeys = await AsyncStorage.getAllKeys();
+    console.log(`🔍 Total claves: ${allKeys.length}`);
+    
+    // Filtrar claves relevantes
+    const fiberKeys = allKeys.filter(k => 
+      k.toLowerCase().includes('fiber') || 
+      k.includes('project') ||
+      k.includes('Project')
+    );
+    
+    console.log(`🔍 Claves relevantes: ${fiberKeys.length}`);
+    fiberKeys.forEach(key => {
+      console.log(`  📍 ${key}`);
+    });
+
+    // 2. BUSCAR CLAVES CON EL PATRÓN DEL PROJECTID
+    console.log(`\n🔍 PASO 2: Buscando projectId ${projectId}...`);
+    const keysWithProjectId = allKeys.filter(k => k.includes(projectId.toString()));
+    console.log(`🔍 Claves con projectId: ${keysWithProjectId.length}`);
+    keysWithProjectId.forEach(key => {
+      console.log(`  🔑 ${key}`);
+    });
+
+    // 3. BUSCAR ESPECÍFICAMENTE LA CLAVE QUE DEBERÍA EXISTIR
+    console.log(`\n🔍 PASO 3: Buscando clave exacta...`);
+    const expectedKey = `@project_${projectId}_fibers`;
+    console.log(`🔍 Clave esperada: ${expectedKey}`);
+    
+    const exactData = await AsyncStorage.getItem(expectedKey);
+    console.log(`🔍 Datos en clave exacta: ${exactData ? 'ENCONTRADOS' : 'NO ENCONTRADOS'}`);
+    
+    if (exactData) {
+      try {
+        const fibers = JSON.parse(exactData);
+        console.log(`🔍 ${fibers.length} fibras encontradas:`);
+        fibers.forEach((fiber, idx) => {
+          console.log(`  ${idx + 1}. ${fiber.label || 'Sin label'} (ID: ${fiber.id}, parent: ${fiber.parentFiberId})`);
+        });
+      } catch (e) {
+        console.error(`🔍 Error parseando:`, e);
       }
+    }
 
-      // Obtener todas las fibras del proyecto (main fibers con parentFiberId = null)
-      let mainFibers = await getFibersByProjectId(projectId, null);
-      console.log('🔷 FusionLink - Fibras principales obtenidas:', mainFibers?.length || 0);
-
-      if (!mainFibers || mainFibers.length === 0) {
-        console.log('🔷 FusionLink - No se encontraron fibras principales');
-        setFibersData([]);
-        setIsLoading(false);
-        return;
+    // 4. BUSCAR EN TODAS LAS CLAVES DE FIBRAS
+    console.log(`\n🔍 PASO 4: Buscando en todas las claves de fibras...`);
+    for (const key of fiberKeys) {
+      try {
+        const value = await AsyncStorage.getItem(key);
+        if (value) {
+          const data = JSON.parse(value);
+          if (Array.isArray(data) && data.length > 0) {
+            // Verificar si alguna fibra tiene este projectId
+            const hasThisProject = data.some(fiber => 
+              fiber.projectId === projectId || 
+              fiber.projectId === parseInt(projectId) ||
+              key.includes(projectId.toString())
+            );
+            
+            if (hasThisProject) {
+              console.log(`🔍 ¡ENCONTRADO! Clave: ${key}`);
+              console.log(`🔍 ${data.length} fibras en esta clave:`);
+              data.forEach((fiber, idx) => {
+                console.log(`  ${idx + 1}. ${fiber.label} (projectId: ${fiber.projectId})`);
+              });
+            }
+          }
+        }
+      } catch (e) {
+        // Ignorar errores de parseo
       }
+    }
 
-      // PROCESAR CADA FIBRA PRINCIPAL Y SUS BUFFERS
-      const processedFibers = [];
-
-      for (const mainFiber of mainFibers) {
+    // 5. BUSCAR CLAVES CON PATRÓN "fiberConfig_"
+    console.log(`\n🔍 PASO 5: Buscando claves fiberConfig_...`);
+    const fiberConfigKeys = allKeys.filter(k => k.includes('fiberConfig_'));
+    console.log(`🔍 Claves fiberConfig_: ${fiberConfigKeys.length}`);
+    
+    for (const key of fiberConfigKeys) {
+      console.log(`  🔎 Examinando: ${key}`);
+      const value = await AsyncStorage.getItem(key);
+      if (value) {
         try {
-          console.log(`🔷 Procesando fibra: ${mainFiber.label} (ID: ${mainFiber.id})`);
-
-          // Parsear metadata de la fibra principal
-          let fiberMetadata = {};
-          if (mainFiber.metadata) {
-            try {
-              fiberMetadata = JSON.parse(mainFiber.metadata);
-              console.log(`   Metadata:`, fiberMetadata);
-            } catch (e) {
-              console.log(`   Error parsing metadata:`, e);
-            }
-          }
-
-          // Obtener threads de la fibra principal
-          const mainFiberThreads = fiberMetadata.threads || Array.from({length: 12}, (_, index) => ({
-            number: index + 1,
-            color: getColorByIndex(index),
-            active: true,
-            inUse: false
-          }));
-
-          // Crear objeto de fibra principal
-          const mainFiberObj = {
-            ...mainFiber,
-            value: mainFiber.id,
-            label: mainFiber.label,
-            key: `fiber-${mainFiber.id}`,
-            threads: mainFiberThreads,
-            isMainFiber: true,
-            buffers: [] // Inicializar array de buffers
-          };
-
-          // OBTENER BUFFERS (fibras hijas con parentFiberId = mainFiber.id)
-          let buffers = [];
-          try {
-            const childFibers = await getFibersByProjectId(projectId, mainFiber.id);
-            console.log(`   Buffers encontrados: ${childFibers?.length || 0}`);
-
-            if (childFibers && childFibers.length > 0) {
-              for (const bufferFiber of childFibers) {
-                // Parsear metadata del buffer
-                let bufferMetadata = {};
-                if (bufferFiber.metadata) {
-                  try {
-                    bufferMetadata = JSON.parse(bufferFiber.metadata);
-                  } catch (e) {
-                    console.log(`   Error parsing buffer metadata:`, e);
-                  }
-                }
-
-                // Obtener threads del buffer
-                const bufferThreads = bufferMetadata.threads || Array.from({length: 12}, (_, index) => ({
-                  number: index + 1,
-                  color: getColorByIndex(index),
-                  active: true,
-                  inUse: false
-                }));
-
-                const bufferObj = {
-                  ...bufferFiber,
-                  value: bufferFiber.id,
-                  label: bufferFiber.label,
-                  key: `buffer-${bufferFiber.id}`,
-                  threads: bufferThreads,
-                  isBuffer: true,
-                  parentFiberId: mainFiber.id
-                };
-
-                buffers.push(bufferObj);
-              }
-            }
-          } catch (error) {
-            console.error(`❌ Error cargando buffers para ${mainFiber.label}:`, error);
-          }
-
-          // Agregar la fibra principal como primer "buffer" (para selección)
-          const allBuffers = [
-            {
-              ...mainFiberObj,
-              label: `${mainFiber.label} (Principal)`,
-              isMainFiber: true
-            },
-            ...buffers
-          ];
-
-          mainFiberObj.buffers = allBuffers;
-          processedFibers.push(mainFiberObj);
-
-        } catch (error) {
-          console.error(`❌ Error procesando fibra ${mainFiber.label}:`, error);
+          const data = JSON.parse(value);
+          console.log(`    Tipo: ${Array.isArray(data) ? `Array (${data.length})` : typeof data}`);
+        } catch (e) {
+          console.log(`    Error parseando`);
         }
       }
-
-      console.log('🔷 FusionLink - Fibras procesadas exitosamente:', processedFibers.length);
-      
-      // APLICAR FILTRADO SEGÚN TIPO DE NODO
-      let filteredFibers = applyNodeFilter(processedFibers, node);
-      console.log('🔷 FusionLink - Fibras después del filtro:', filteredFibers.length);
-
-      setFibersData(filteredFibers);
-
-      // CARGAR DATOS EXISTENTES SI HAY UN LINK
-      if (link && filteredFibers.length > 0) {
-        console.log('🔷 Cargando datos del link existente');
-        loadExistingLinkData(filteredFibers);
-      }
-
-    } catch (error) {
-      console.error('❌ Error general cargando fibras:', error);
-      Alert.alert("Error", "No se pudieron cargar las fibras del proyecto");
-    } finally {
-      setIsLoading(false);
     }
-  };
+
+    // 6. BUSCAR EL ÚLTIMO PROJECTID GUARDADO
+    console.log(`\n🔍 PASO 6: Buscando último projectId guardado...`);
+    const projectKeys = allKeys.filter(k => k.includes('@project_'));
+    console.log(`🔍 Claves de proyectos: ${projectKeys.length}`);
+    
+    if (projectKeys.length > 0) {
+      console.log(`🔍 Últimas claves de proyecto:`);
+      projectKeys.slice(-5).forEach(key => {
+        console.log(`  📂 ${key}`);
+      });
+      
+      // Leer la última clave
+      const lastKey = projectKeys[projectKeys.length - 1];
+      const lastValue = await AsyncStorage.getItem(lastKey);
+      if (lastValue) {
+        try {
+          const lastData = JSON.parse(lastValue);
+          console.log(`🔍 Datos en ${lastKey}: ${lastData.length} fibras`);
+        } catch (e) {
+          console.error(`🔍 Error parseando último:`, e);
+        }
+      }
+    }
+
+    console.log('🚨 === FIN DEBUG ===');
+
+    // 🔥 SI NO ENCUENTRA NADA, CREAR FIBRAS DE PRUEBA TEMPORALES
+    if (!exactData) {
+      console.log('⚠️ No se encontraron fibras, creando datos de prueba...');
+      
+      const testFibers = [
+        {
+          id: `test_${Date.now()}_1`,
+          label: '12F_TEST_1',
+          typeId: '12F',
+          projectId: projectId,
+          nodeId: null,
+          parentFiberId: null,
+          metadata: JSON.stringify({
+            threads: Array.from({length: 12}, (_, i) => ({
+              number: i + 1,
+              color: getColorByIndex(i),
+              active: true,
+              inUse: false
+            })),
+            isSystemFiber: false
+          }),
+          buffers: []
+        },
+        {
+          id: `test_${Date.now()}_2`,
+          label: '24F_TEST_1',
+          typeId: '24F',
+          projectId: projectId,
+          nodeId: null,
+          parentFiberId: null,
+          metadata: JSON.stringify({
+            threads: Array.from({length: 12}, (_, i) => ({
+              number: i + 1,
+              color: getColorByIndex(i),
+              active: true,
+              inUse: false
+            })),
+            isSystemFiber: false
+          }),
+          buffers: [
+            {
+              id: `test_buffer_${Date.now()}_1`,
+              label: '24F_TEST_1_Buffer1',
+              typeId: '12F',
+              projectId: projectId,
+              nodeId: null,
+              parentFiberId: `test_${Date.now()}_2`,
+              metadata: JSON.stringify({
+                threads: Array.from({length: 12}, (_, i) => ({
+                  number: i + 1,
+                  color: getColorByIndex(i),
+                  active: true,
+                  inUse: false
+                })),
+                isBuffer: true
+              })
+            }
+          ]
+        }
+      ];
+
+      // Guardar fibras de prueba
+      await AsyncStorage.setItem(expectedKey, JSON.stringify(testFibers));
+      console.log(`✅ Fibras de prueba guardadas en ${expectedKey}`);
+      
+      // Procesar las fibras de prueba
+      const processedTestFibers = processFibersForUI(testFibers, projectId);
+      setFibersData(applyNodeFilter(processedTestFibers, node));
+      
+    } else {
+      // Procesar las fibras reales encontradas
+      const fibers = JSON.parse(exactData);
+      const processedFibers = processFibersForUI(fibers, projectId);
+      setFibersData(applyNodeFilter(processedFibers, node));
+    }
+
+  } catch (error) {
+    console.error('❌ Error en debug completo:', error);
+    Alert.alert("Error", "No se pudieron cargar las fibras");
+  } finally {
+    setIsLoading(false);
+  }
+};
+
+// 🔥 AÑADE ESTA FUNCIÓN AUXILIAR
+const processFibersForUI = (fibersArray, currentProjectId) => {
+  console.log(`🔧 Procesando ${fibersArray.length} fibras para UI...`);
+  
+  // Separar fibras principales de buffers
+  const mainFibers = fibersArray.filter(f => !f.parentFiberId);
+  const buffersMap = new Map();
+  
+  fibersArray.filter(f => f.parentFiberId).forEach(buffer => {
+    if (!buffersMap.has(buffer.parentFiberId)) {
+      buffersMap.set(buffer.parentFiberId, []);
+    }
+    buffersMap.get(buffer.parentFiberId).push(buffer);
+  });
+  
+  const processed = [];
+  
+  for (const mainFiber of mainFibers) {
+    // Parsear metadata
+    let metadata = {};
+    if (mainFiber.metadata) {
+      try {
+        metadata = typeof mainFiber.metadata === 'string' 
+          ? JSON.parse(mainFiber.metadata) 
+          : mainFiber.metadata;
+      } catch (e) {
+        console.error('Error parsing metadata:', e);
+      }
+    }
+    
+    const threads = metadata.threads || Array.from({length: 12}, (_, i) => ({
+      number: i + 1,
+      color: getColorByIndex(i),
+      active: true,
+      inUse: false
+    }));
+    
+    // Obtener buffers
+    const buffers = buffersMap.get(mainFiber.id) || [];
+    const allSelections = [];
+    
+    // Fibra principal
+    allSelections.push({
+      ...mainFiber,
+      value: mainFiber.id,
+      label: `${mainFiber.label} (Principal)`,
+      threads: threads,
+      isMainFiber: true
+    });
+    
+    // Buffers
+    buffers.forEach(buffer => {
+      let bufferMetadata = {};
+      if (buffer.metadata) {
+        try {
+          bufferMetadata = typeof buffer.metadata === 'string' 
+            ? JSON.parse(buffer.metadata) 
+            : buffer.metadata;
+        } catch (e) {
+          console.error('Error parsing buffer metadata:', e);
+        }
+      }
+      
+      const bufferThreads = bufferMetadata.threads || Array.from({length: 12}, (_, i) => ({
+        number: i + 1,
+        color: getColorByIndex(i),
+        active: true,
+        inUse: false
+      }));
+      
+      allSelections.push({
+        ...buffer,
+        value: buffer.id,
+        label: buffer.label,
+        threads: bufferThreads,
+        isBuffer: true
+      });
+    });
+    
+    processed.push({
+      ...mainFiber,
+      value: mainFiber.id,
+      label: mainFiber.label,
+      threads: threads,
+      buffers: allSelections,
+      isMainFiber: true
+    });
+  }
+  
+  console.log(`🔧 ${processed.length} fibras procesadas para UI`);
+  return processed;
+};
+
+const testAdapterFunction = async () => {
+  try {
+    console.log('🔧 Probando adapter.getFibersByProjectId...');
+    
+    // Probar con diferentes formatos
+    const testCases = [
+      { id: projectId, type: 'original' },
+      { id: projectId.toString(), type: 'string' },
+      { id: parseInt(projectId), type: 'number' }
+    ];
+    
+    for (const testCase of testCases) {
+      if (!testCase.id) continue;
+      
+      try {
+        console.log(`🔧 Probando con ${testCase.type}: ${testCase.id}`);
+        const result = await getFibersByProjectId(testCase.id, null);
+        console.log(`🔧 Resultado (${testCase.type}):`, result?.length || 0);
+        
+        if (result && result.length > 0) {
+          console.log(`🔧 Fibras encontradas:`);
+          result.forEach((fiber, idx) => {
+            console.log(`  ${idx + 1}. ${fiber.label} (${fiber.id})`);
+          });
+          return result;
+        }
+      } catch (testError) {
+        console.error(`🔧 Error con ${testCase.type}:`, testError.message);
+      }
+    }
+    
+    return [];
+  } catch (error) {
+    console.error('❌ Error en test:', error);
+    return [];
+  }
+};
+
+// const debugHowFibersAreSaved = async () => {
+//   try {
+//     console.log('=== DEBUG: ¿CÓMO SE GUARDAN LAS FIBRAS? ===');
+    
+//     // 1. Verificar si hay claves con el formato de CreateProject
+//     const allKeys = await AsyncStorage.getAllKeys();
+    
+//     // Buscar patrones de guardado
+//     const patterns = {
+//       fiberConfig: allKeys.filter(k => k.includes('fiberConfig_')),
+//       projectFibers: allKeys.filter(k => k.includes('@project_') && k.includes('_fibers')),
+//       fibersDirect: allKeys.filter(k => k.toLowerCase().includes('fiber') && !k.includes('Config')),
+//       projectKeys: allKeys.filter(k => k.includes('project'))
+//     };
+    
+//     console.log('📋 Patrones encontrados:');
+//     console.log('   fiberConfig_:', patterns.fiberConfig.length);
+//     console.log('   @project_*_fibers:', patterns.projectFibers.length);
+//     console.log('   fibers direct:', patterns.fibersDirect.length);
+//     console.log('   project keys:', patterns.projectKeys.length);
+    
+//     // Mostrar ejemplos
+//     if (patterns.fiberConfig.length > 0) {
+//       console.log('🔍 Ejemplos fiberConfig_:');
+//       patterns.fiberConfig.slice(0, 3).forEach(key => {
+//         console.log(`   - ${key}`);
+//       });
+//     }
+    
+//     // 2. Leer una clave de fiberConfig_ para ver su estructura
+//     if (patterns.fiberConfig.length > 0) {
+//       const sampleKey = patterns.fiberConfig[0];
+//       const value = await AsyncStorage.getItem(sampleKey);
+//       if (value) {
+//         try {
+//           const data = JSON.parse(value);
+//           console.log(`🔍 Estructura de ${sampleKey}:`);
+//           console.log(`   Tipo: ${Array.isArray(data) ? 'Array' : 'Object'}`);
+//           if (Array.isArray(data)) {
+//             console.log(`   Elementos: ${data.length}`);
+//             if (data.length > 0) {
+//               console.log(`   Primer elemento:`);
+//               console.log(`     ID: ${data[0].id}`);
+//               console.log(`     Label: ${data[0].label}`);
+//               console.log(`     Type: ${data[0].typeId}`);
+//               console.log(`     ProjectId: ${data[0].projectId}`);
+//               console.log(`     ParentFiberId: ${data[0].parentFiberId}`);
+//             }
+//           }
+//         } catch (e) {
+//           console.error(`   ❌ Error parseando:`, e);
+//         }
+//       }
+//     }
+    
+//     console.log('=== FIN DEBUG ===');
+//   } catch (error) {
+//     console.error('❌ Error en debug:', error);
+//   }
+// };
 
   // 🔥 FUNCIÓN PARA APLICAR FILTRO POR TIPO DE NODO
+  
   const applyNodeFilter = (fibers, currentNode) => {
     if (!currentNode) return fibers;
 
@@ -1337,9 +2248,38 @@ const FusionLink = ({ route, navigation }) => {
   };
 
   // 🔥 EFFECT MEJORADO PARA CARGAR FIBRAS
+  // useEffect(() => {
+  //   // loadProjectFibers();
+  //   // Ejecutar depuración si no hay fibras
+  // loadProjectFibers().then(() => {
+  //   // Si después de cargar no hay fibras, ejecutar depuración
+  //   if (fibersData.length === 0 && !isLoading) {
+  //     console.log('⚠️ No se cargaron fibras, ejecutando depuración...');
+  //     debugAsyncStorage(); // Descomenta si necesitas depurar
+  //   }
+  //   });
+  // }, [projectId, node, link]);
   useEffect(() => {
-    loadProjectFibers();
-  }, [projectId, node, link]);
+  console.log('🔄 useEffect - Iniciando carga de fibras');
+  console.log('📊 Params recibidos:', route.params);
+  console.log('🆔 ProjectID:', projectId);
+  console.log('👤 Nodo:', node?.label);
+  
+  // Ejecutar depuración detallada
+  // debugHowFibersAreSaved().then(() => {
+  //   // Luego cargar las fibras
+  //   loadProjectFibers();
+  // });
+  testAdapterFunction().then((fibers) => {
+    if (fibers.length > 0) {
+      console.log('✅ Adapter funciona, procediendo con carga normal');
+      loadProjectFibers();
+    } else {
+      console.log('⚠️ Adapter no devolvió fibras, usando carga directa');
+      loadProjectFibers();
+    }
+  });
+}, [projectId, node, link]);
 
   // 🔥 FUNCIÓN MEJORADA PARA CARGAR LINK EXISTENTE
   const loadExistingLinkData = (fibers) => {

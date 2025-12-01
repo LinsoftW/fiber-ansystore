@@ -28,6 +28,7 @@ import { useDevice } from "../context/DeviceContext";
 import { useAdapter } from "@/api/contexts/DatabaseContext";
 import { v4 as uuidv4 } from "uuid";
 import * as MediaLibrary from "expo-media-library";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const CreateProject = ({ navigation, route }) => {
   // Obtener adapter
@@ -751,137 +752,253 @@ const CreateProject = ({ navigation, route }) => {
 // };
 
 // FUNCIÓN PARA GUARDAR FIBRAS EN LA BASE DE DATOS
-const saveFibersToDatabase = async (projectId) => {
-  try {
-    console.log("💾 Saving fibers to database for project:", projectId);
-    console.log("📊 Total fibers to save:", fibers.length);
+
+
+// const saveFibersToDatabase = async (projectId) => {
+//   try {
+//     console.log("💾 Saving fibers to database for project:", projectId);
+//     console.log("📊 Total fibers to save:", fibers.length);
     
-    const fiberIdsToKeep = [];
+    
+//     const fiberIdsToKeep = [];
+
+//     // Procesar fibras principales
+//     for (const fiber of fibers) {
+//       if (fiber.deleted) {
+//         // Eliminar fibra si tiene ID
+//         if (fiber.id) {
+//           await deleteFiber(fiber.id);
+//           console.log("🗑️ Deleted fiber:", fiber.label);
+//         }
+//         continue;
+//       }
+
+//       if (!fiber.id) {
+//         // Crear nueva fibra
+//         const fiberToSave = {
+//           label: fiber.label,
+//           typeId: fiber.typeId,
+//           projectId: projectId,
+//           nodeId: fiber.nodeId || null,
+//           parentFiberId: null, // Fibras principales no tienen parent
+//           metadata: JSON.stringify({
+//             threads: fiber.threads || [],
+//             isSystemFiber: fiber.isSystemFiber || false,
+//             buffersCount: fiber.buffers?.length || 0
+//           }),
+//           createdDate: fiber.createdDate || new Date().toISOString(),
+//           modifiedDate: new Date().toISOString(),
+//           deleted: 0
+//         };
+
+//         console.log("➕ Creating fiber:", fiberToSave.label);
+//         const createdFiber = await createFiber(fiberToSave);
+//         console.log("✅ Created fiber:", createdFiber.label, "ID:", createdFiber.id);
+        
+//         // Actualizar el ID en el estado local
+//         fiber.id = createdFiber.id;
+//         fiberIdsToKeep.push(createdFiber.id);
+
+//         // Guardar buffers si existen
+//         if (fiber.buffers && fiber.buffers.length > 0) {
+//           console.log("📦 Saving", fiber.buffers.length, "buffers for fiber:", fiber.label);
+//           for (const buffer of fiber.buffers) {
+//             if (!buffer.id) {
+//               const bufferToSave = {
+//                 label: buffer.label,
+//                 typeId: buffer.typeId,
+//                 projectId: projectId,
+//                 nodeId: buffer.nodeId || null,
+//                 parentFiberId: createdFiber.id, // Los buffers tienen parent
+//                 metadata: JSON.stringify({
+//                   threads: buffer.threads || [],
+//                   isBuffer: true,
+//                   parentFiberLabel: fiber.label
+//                 }),
+//                 createdDate: buffer.createdDate || new Date().toISOString(),
+//                 modifiedDate: new Date().toISOString(),
+//                 deleted: 0
+//               };
+              
+//               console.log("➕ Creating buffer:", bufferToSave.label);
+//               const createdBuffer = await createFiber(bufferToSave);
+//               console.log("✅ Created buffer:", createdBuffer.label, "ID:", createdBuffer.id);
+//               buffer.id = createdBuffer.id;
+//               fiberIdsToKeep.push(createdBuffer.id);
+//             }
+//           }
+//         }
+//       } else {
+//         // Actualizar fibra existente
+//         const fiberToUpdate = {
+//           label: fiber.label,
+//           typeId: fiber.typeId,
+//           nodeId: fiber.nodeId || null,
+//           metadata: JSON.stringify({
+//             threads: fiber.threads || [],
+//             isSystemFiber: fiber.isSystemFiber || false,
+//             buffersCount: fiber.buffers?.length || 0
+//           }),
+//           modifiedDate: new Date().toISOString()
+//         };
+
+//         await updateFiber(fiber.id, fiberToUpdate);
+//         console.log("📝 Updated fiber:", fiber.label);
+//         fiberIdsToKeep.push(fiber.id);
+
+//         // Actualizar buffers existentes
+//         if (fiber.buffers && fiber.buffers.length > 0) {
+//           for (const buffer of fiber.buffers) {
+//             if (buffer.id) {
+//               const bufferToUpdate = {
+//                 label: buffer.label,
+//                 typeId: buffer.typeId,
+//                 nodeId: buffer.nodeId || null,
+//                 metadata: JSON.stringify({
+//                   threads: buffer.threads || [],
+//                   isBuffer: true,
+//                   parentFiberLabel: fiber.label
+//                 }),
+//                 modifiedDate: new Date().toISOString()
+//               };
+//               await updateFiber(buffer.id, bufferToUpdate);
+//               fiberIdsToKeep.push(buffer.id);
+//             }
+//           }
+//         }
+//       }
+//     }
+
+//     // Procesar fibras eliminadas
+//     for (const fiberId of deletedFiberIds) {
+//       if (fiberId) {
+//         await deleteFiber(fiberId);
+//         console.log("🗑️ Deleted fiber by ID:", fiberId);
+//       }
+//     }
+
+//     setDeletedFiberIds([]);
+//     console.log("✅ All fibers saved successfully. Total:", fiberIdsToKeep.length);
+    
+//   } catch (error) {
+//     console.error("❌ Error saving fibers:", error);
+//     throw error;
+//   }
+// };
+  
+// REEMPLAZA COMPLETAMENTE saveFibersToDatabase en CreateProject.js:
+
+const saveFibersToDatabase = async (currentProjectId) => {
+  try {
+    console.log("💾 === INICIO GUARDADO FIBRAS ===");
+    console.log("📁 ProjectID recibido:", currentProjectId, "tipo:", typeof currentProjectId);
+    
+    // 🔥 VERIFICACIÓN CRÍTICA
+    if (!currentProjectId) {
+      console.error("❌ ERROR CRÍTICO: currentProjectId es undefined/null");
+      console.error("❌ Estado actual:");
+      console.error("   - projectId del estado:", projectId);
+      console.error("   - isEditMode:", isEditMode);
+      console.error("   - createdProjId:", createdProjId);
+      return;
+    }
+
+    console.log("📊 Fibras a guardar:", fibers.length);
+    
+    // MOSTRAR TODAS LAS FIBRAS
+    fibers.forEach((fiber, index) => {
+      console.log(`  ${index + 1}. ${fiber.label} (ID: ${fiber.id || 'no-id'}, nodeId: ${fiber.nodeId})`);
+    });
+    
+    const saveKey = `@project_${currentProjectId}_fibers`;
+    console.log("🔑 Clave de guardado:", saveKey);
+    
+    const allFibersToSave = [];
 
     // Procesar fibras principales
     for (const fiber of fibers) {
-      if (fiber.deleted) {
-        // Eliminar fibra si tiene ID
-        if (fiber.id) {
-          await deleteFiber(fiber.id);
-          console.log("🗑️ Deleted fiber:", fiber.label);
+      if (fiber.deleted) continue;
+
+      const fiberToSave = {
+        id: fiber.id || `fiber_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        label: fiber.label,
+        typeId: fiber.typeId,
+        projectId: currentProjectId,
+        nodeId: fiber.nodeId || null,
+        parentFiberId: null,
+        metadata: JSON.stringify({
+          threads: fiber.threads || [],
+          isSystemFiber: fiber.isSystemFiber || false,
+          buffersCount: fiber.buffers?.length || 0
+        }),
+        createdDate: fiber.createdDate || new Date().toISOString(),
+        modifiedDate: new Date().toISOString(),
+        deleted: 0
+      };
+
+      console.log(`➕ Fibra: ${fiberToSave.label}`);
+      allFibersToSave.push(fiberToSave);
+
+      // Guardar buffers
+      if (fiber.buffers && fiber.buffers.length > 0) {
+        for (const buffer of fiber.buffers) {
+          const bufferToSave = {
+            id: buffer.id || `buffer_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            label: buffer.label,
+            typeId: buffer.typeId,
+            projectId: currentProjectId,
+            nodeId: buffer.nodeId || null,
+            parentFiberId: fiberToSave.id,
+            metadata: JSON.stringify({
+              threads: buffer.threads || [],
+              isBuffer: true,
+              parentFiberLabel: fiber.label
+            }),
+            createdDate: buffer.createdDate || new Date().toISOString(),
+            modifiedDate: new Date().toISOString(),
+            deleted: 0
+          };
+          
+          console.log(`  🔹 Buffer: ${bufferToSave.label}`);
+          allFibersToSave.push(bufferToSave);
         }
-        continue;
       }
+    }
 
-      if (!fiber.id) {
-        // Crear nueva fibra
-        const fiberToSave = {
-          label: fiber.label,
-          typeId: fiber.typeId,
-          projectId: projectId,
-          nodeId: fiber.nodeId || null,
-          parentFiberId: null, // Fibras principales no tienen parent
-          metadata: JSON.stringify({
-            threads: fiber.threads || [],
-            isSystemFiber: fiber.isSystemFiber || false,
-            buffersCount: fiber.buffers?.length || 0
-          }),
-          createdDate: fiber.createdDate || new Date().toISOString(),
-          modifiedDate: new Date().toISOString(),
-          deleted: 0
-        };
-
-        console.log("➕ Creating fiber:", fiberToSave.label);
-        const createdFiber = await createFiber(fiberToSave);
-        console.log("✅ Created fiber:", createdFiber.label, "ID:", createdFiber.id);
+    console.log("💾 Total a guardar:", allFibersToSave.length);
+    
+    // 🔥 GUARDAR EN ASYNCSTORAGE
+    try {
+      console.log("💾 Guardando en AsyncStorage...");
+      await AsyncStorage.setItem(saveKey, JSON.stringify(allFibersToSave));
+      
+      // VERIFICAR
+      const savedData = await AsyncStorage.getItem(saveKey);
+      if (savedData) {
+        const parsed = JSON.parse(savedData);
+        console.log(`✅ VERIFICACIÓN: ${parsed.length} fibras guardadas en ${saveKey}`);
         
-        // Actualizar el ID en el estado local
-        fiber.id = createdFiber.id;
-        fiberIdsToKeep.push(createdFiber.id);
-
-        // Guardar buffers si existen
-        if (fiber.buffers && fiber.buffers.length > 0) {
-          console.log("📦 Saving", fiber.buffers.length, "buffers for fiber:", fiber.label);
-          for (const buffer of fiber.buffers) {
-            if (!buffer.id) {
-              const bufferToSave = {
-                label: buffer.label,
-                typeId: buffer.typeId,
-                projectId: projectId,
-                nodeId: buffer.nodeId || null,
-                parentFiberId: createdFiber.id, // Los buffers tienen parent
-                metadata: JSON.stringify({
-                  threads: buffer.threads || [],
-                  isBuffer: true,
-                  parentFiberLabel: fiber.label
-                }),
-                createdDate: buffer.createdDate || new Date().toISOString(),
-                modifiedDate: new Date().toISOString(),
-                deleted: 0
-              };
-              
-              console.log("➕ Creating buffer:", bufferToSave.label);
-              const createdBuffer = await createFiber(bufferToSave);
-              console.log("✅ Created buffer:", createdBuffer.label, "ID:", createdBuffer.id);
-              buffer.id = createdBuffer.id;
-              fiberIdsToKeep.push(createdBuffer.id);
-            }
-          }
-        }
+        // Mostrar lo guardado
+        parsed.forEach((item, idx) => {
+          console.log(`  ${idx + 1}. ${item.label} (${item.parentFiberId ? 'Buffer' : 'Fibra'})`);
+        });
       } else {
-        // Actualizar fibra existente
-        const fiberToUpdate = {
-          label: fiber.label,
-          typeId: fiber.typeId,
-          nodeId: fiber.nodeId || null,
-          metadata: JSON.stringify({
-            threads: fiber.threads || [],
-            isSystemFiber: fiber.isSystemFiber || false,
-            buffersCount: fiber.buffers?.length || 0
-          }),
-          modifiedDate: new Date().toISOString()
-        };
-
-        await updateFiber(fiber.id, fiberToUpdate);
-        console.log("📝 Updated fiber:", fiber.label);
-        fiberIdsToKeep.push(fiber.id);
-
-        // Actualizar buffers existentes
-        if (fiber.buffers && fiber.buffers.length > 0) {
-          for (const buffer of fiber.buffers) {
-            if (buffer.id) {
-              const bufferToUpdate = {
-                label: buffer.label,
-                typeId: buffer.typeId,
-                nodeId: buffer.nodeId || null,
-                metadata: JSON.stringify({
-                  threads: buffer.threads || [],
-                  isBuffer: true,
-                  parentFiberLabel: fiber.label
-                }),
-                modifiedDate: new Date().toISOString()
-              };
-              await updateFiber(buffer.id, bufferToUpdate);
-              fiberIdsToKeep.push(buffer.id);
-            }
-          }
-        }
+        console.error("❌ VERIFICACIÓN FALLIDA: No se pudo leer después de guardar");
       }
+      
+    } catch (storageError) {
+      console.error("❌ Error guardando en AsyncStorage:", storageError);
+      throw storageError;
     }
 
-    // Procesar fibras eliminadas
-    for (const fiberId of deletedFiberIds) {
-      if (fiberId) {
-        await deleteFiber(fiberId);
-        console.log("🗑️ Deleted fiber by ID:", fiberId);
-      }
-    }
-
-    setDeletedFiberIds([]);
-    console.log("✅ All fibers saved successfully. Total:", fiberIdsToKeep.length);
+    console.log("💾 === FIN GUARDADO FIBRAS ===");
     
   } catch (error) {
-    console.error("❌ Error saving fibers:", error);
+    console.error("❌ Error general guardando fibras:", error);
     throw error;
   }
 };
-  
+
 const handleInputChange = (field, value) => {
     setProjectData((prev) => ({
       ...prev,
@@ -1375,7 +1492,22 @@ const handleInputChange = (field, value) => {
         ));
 
         // 🔥 GUARDAR FIBRAS - NUEVO
-      await saveFibersToDatabase(projectId);
+      // await saveFibersToDatabase(projectId);
+      console.log("🔍 ANTES DE GUARDAR FIBRAS:");
+console.log("   - projectId:", projectId);
+console.log("   - projectToSave.id:", projectToSave?.id);
+// console.log("   - createdProjId:", createdProjId);
+
+// Determinar el ID correcto del proyecto
+const targetProjectId = projectId || projectToSave?.id || createdProjId;
+console.log("🔍 ID de proyecto a usar:", targetProjectId);
+
+if (targetProjectId) {
+  await saveFibersToDatabase(targetProjectId);
+} else {
+  console.error("❌ ERROR CRÍTICO: No hay projectId para guardar fibras");
+  Alert.alert("Error", "No se pudo guardar las fibras - ID de proyecto no disponible");
+}
 
       } else {
         // MODO CREACIÓN
