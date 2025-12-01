@@ -23,22 +23,11 @@
       "bundleIdentifier": "com.yourcompany.fibraopticaapp"
     },
     "android": {
-      "enableDexingArtifactTransform": false,
-      "proguard": {
-        "enabled": true,
-        "rules": "./proguard-rules.pro"
-      },
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/logo3.png",
         "backgroundColor": "#ffffff"
       },
       "softwareKeyboardLayoutMode": "pan",
-      "abiFilters": [
-        "arm64-v8a"
-      ],
-      "enableDangerousExperimentalLeanBuilds": true,
-      "jsEngine": "hermes",
-      "ndk": "arm64-v8a",
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
@@ -46,7 +35,7 @@
         "android.permission.ACCESS_FINE_LOCATION"
       ],
       "package": "com.yourcompany.fibraopticaapp",
-      "versionCode": 28
+      "versionCode": 29
     },
     "androidStatusBar": {
       "translucent": true,
@@ -76,16 +65,11 @@
             "extraProguardRules": "-keep class com.facebook.hermes.unicode.** { *; }",
             "compileSdkVersion": 35,
             "targetSdkVersion": 35,
-            "buildToolsVersion": "35.0.0",
-            "buildArchs": [
-              "arm64-v8a"
-            ],
-            "reactNativeArchitectures": [
-              "arm64-v8a"
-            ]
+            "buildToolsVersion": "35.0.0"
           },
           "ios": {
-            "deploymentTarget": "15.1"
+            "deploymentTarget": "15.1",
+            "hermesEnabled": true
           }
         }
       ],
@@ -105,9 +89,6 @@
     },
     "runtimeVersion": {
       "policy": "appVersion"
-    },
-    "react-native": {
-      "hermesEnabled": true
     }
   }
 }
