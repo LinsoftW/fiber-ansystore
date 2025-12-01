@@ -46,7 +46,7 @@
         "android.permission.ACCESS_FINE_LOCATION"
       ],
       "package": "com.yourcompany.fibraopticaapp",
-      "versionCode": 21
+      "versionCode": 25
     },
     "androidStatusBar": {
       "translucent": true,
