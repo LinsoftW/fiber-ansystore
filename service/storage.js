@@ -1058,5 +1058,57 @@ export default {
   MediaService,
   getCompleteProjectData,
   exportProjectData,
-  initializeStorage
+  initializeStorage,
+  // 🔥 NUEVO: Servicios de lectura para verificar persistencia
+  FiberStorageService,
+  DeviceStorageService,
+  ConnectionStorageService
+};
+
+// 🔥 NUEVO: Servicio para leer fibras guardadas
+export const FiberStorageService = {
+  getFibersByProject: async (projectId) => {
+    try {
+      const fibersKey = `@fibraoptica/fibers_project_${projectId}`;
+      const data = await AsyncStorage.getItem(fibersKey);
+      const fibers = data ? JSON.parse(data) : [];
+      console.log(`📦 Lectura de fibras para proyecto ${projectId}:`, fibers.length);
+      return fibers;
+    } catch (error) {
+      console.error('❌ Error leyendo fibras:', error);
+      return [];
+    }
+  }
+};
+
+// 🔥 NUEVO: Servicio para leer dispositivos guardados
+export const DeviceStorageService = {
+  getDevicesByProject: async (projectId) => {
+    try {
+      const deviceKey = `@fibraoptica/devices_${projectId}`;
+      const data = await AsyncStorage.getItem(deviceKey);
+      const devices = data ? JSON.parse(data) : [];
+      console.log(`📦 Lectura de dispositivos para proyecto ${projectId}:`, devices.length);
+      return devices;
+    } catch (error) {
+      console.error('❌ Error leyendo dispositivos:', error);
+      return [];
+    }
+  }
+};
+
+// 🔥 NUEVO: Servicio para leer conexiones guardadas
+export const ConnectionStorageService = {
+  getConnectionsByProject: async (projectId) => {
+    try {
+      const connectionsKey = `@fibraoptica/connections_${projectId}`;
+      const data = await AsyncStorage.getItem(connectionsKey);
+      const connections = data ? JSON.parse(data) : [];
+      console.log(`📦 Lectura de conexiones para proyecto ${projectId}:`, connections.length);
+      return connections;
+    } catch (error) {
+      console.error('❌ Error leyendo conexiones:', error);
+      return [];
+    }
+  }
 };

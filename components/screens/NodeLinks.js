@@ -1825,6 +1825,7 @@ import { useApp } from "../context/AppContext";
 import { useTranslation } from "../hooks/useTranslation";
 import { useDevice } from "../context/DeviceContext";
 import { useAdapter } from "@/api/contexts/DatabaseContext";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { v4 as uuidv4 } from "uuid";
 import RNPickerSelect from "react-native-picker-select";
@@ -1882,9 +1883,37 @@ const NodeLinks = ({ route, navigation }) => {
     const loadFibers = async () => {
       try {
         if (node.projectId) {
-          const fibers = await getFibersByProjectId(node.projectId, null);
+          console.log('🔷 NodeLinks - Cargando fibras para proyecto:', node.projectId);
+          
+          let fibers = [];
+          
+          // 🔥 CAMBIO: Leer de AsyncStorage primero
+          const asyncKey = `@fibraoptica/fibers_project_${node.projectId}`;
+          let asyncData = null;
+          
+          try {
+            asyncData = await AsyncStorage.getItem(asyncKey);
+            if (asyncData) {
+              const allFibersFromAsync = JSON.parse(asyncData);
+              // Filtrar solo fibras principales (parentFiberId = null)
+              fibers = allFibersFromAsync.filter(f => !f.parentFiberId);
+              console.log('✅ Fibras cargadas de AsyncStorage:', fibers.length);
+            } else {
+              console.log('⚠️ No hay fibras en AsyncStorage');
+            }
+          } catch (asyncError) {
+            console.error('❌ Error leyendo AsyncStorage:', asyncError);
+          }
+          
+          // Fallback: Si no hay en AsyncStorage, intenta BD
+          if (fibers.length === 0) {
+            console.log('📥 Fallback: Intentando BD...');
+            fibers = await getFibersByProjectId(node.projectId, null);
+            console.log('🔷 Fibras obtenidas de BD (fallback):', fibers?.length || 0);
+          }
+          
           setFibersData(fibers || []);
-          console.log("✅ Fibras cargadas:", fibers?.length || 0);
+          console.log("✅ Fibras disponibles en NodeLinks:", fibers?.length || 0);
         }
       } catch (error) {
         console.error("❌ Error loading fibers:", error);

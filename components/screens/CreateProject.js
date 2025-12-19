@@ -508,7 +508,13 @@ const CreateProject = ({ navigation, route }) => {
   };
 
   const loadProjectData = async (id) => {
+    const timestamp = new Date().toISOString();
     try {
+      console.log("\n" + "=".repeat(80));
+      console.log("📥 === INICIANDO CARGA DE DATOS DEL PROYECTO ===", timestamp);
+      console.log(`    Project ID: ${id}`);
+      console.log("=".repeat(80));
+
       setDeletedFiberIds([]);
 
       // Cargar datos del proyecto
@@ -526,12 +532,24 @@ const CreateProject = ({ navigation, route }) => {
       }
 
       // Cargar nodos
-      console.log("📥 Loading nodes for project:", id);
-      const dbNodes = await getNodesByProject(id);
-      console.log("📦 Loaded nodes from database:", dbNodes?.length || 0);
+      console.log("\n1️⃣ CARGANDO NODOS:");
+      console.log(`   📥 Leyendo nodos de AsyncStorage para proyecto: ${id}`);
+      
+      // Intentar cargar de AsyncStorage primero
+      let nodesFromAsync = await loadNodesFromAsyncStorage(id);
+      
+      if (nodesFromAsync && nodesFromAsync.length > 0) {
+        console.log(`   ✅ ${nodesFromAsync.length} nodos cargados de AsyncStorage`);
+        setAllNodes(nodesFromAsync);
+        setNodes(nodesFromAsync);
+      } else {
+        // Fallback a Base de Datos
+        console.log(`   📥 Fallback: Leyendo nodos de base de datos para proyecto: ${id}`);
+        const dbNodes = await getNodesByProject(id);
+        console.log(`   📦 Nodos cargados: ${dbNodes?.length || 0}`);
 
-      if (!dbNodes || dbNodes.length === 0) {
-        console.log("⚠️ No nodes found for project, creating default MDF");
+        if (!dbNodes || dbNodes.length === 0) {
+        console.log("   ⚠️ No nodes found, creating default MDF");
         const hash = uuidv4();
         const defaultMDF = {
           hash: hash,
@@ -549,12 +567,12 @@ const CreateProject = ({ navigation, route }) => {
             ...defaultMDF,
             projectId: id,
           });
-          console.log("✅ Created default MDF node:", savedNode);
+          console.log("   ✅ Created default MDF node:", savedNode.id);
           
           setAllNodes([{...defaultMDF, id: savedNode.id}]);
           setNodes([{...defaultMDF, id: savedNode.id}]);
         } catch (error) {
-          console.error("❌ Error creating default MDF node:", error);
+          console.error("   ❌ Error creating default MDF node:", error);
           setAllNodes([defaultMDF]);
           setNodes([defaultMDF]);
         }
@@ -567,7 +585,7 @@ const CreateProject = ({ navigation, route }) => {
             try {
               parsedMetadata = JSON.parse(metadataStr);
             } catch (e) {
-              console.error(`❌ Error parsing metadata for node ${node.label}:`, e);
+              console.error(`   ❌ Error parsing metadata for node ${node.label}:`, e);
             }
           } else if (metadataStr && typeof metadataStr === "object") {
             parsedMetadata = metadataStr;
@@ -588,54 +606,105 @@ const CreateProject = ({ navigation, route }) => {
           };
         });
 
-        setAllNodes(mappedNodes);
-        setNodes(mappedNodes);
-        console.log("✅ Loaded", mappedNodes.length, "nodes successfully");
+          setAllNodes(mappedNodes);
+          setNodes(mappedNodes);
+          console.log(`   ✅ ${mappedNodes.length} nodos cargados correctamente desde DB`);
+        }
       }
 
-      // Cargar fibras
-      let records = await getFibersByProjectId(id, null);
-      console.log("📦 Loaded main fibers from database:", records?.length || 0);
-      let dbFibers = [];
-
-      // if (records && records.length > 0) {
-      //   for (let f of records) {
-      //     const buffers = await getFibersByProjectId(id, f.id);
-      //     dbFibers.push({
-      //       ...f,
-      //       buffers: buffers || [],
-      //     });
-      //   }
-      // }
-      if (records && records.length > 0) {
-  for (let f of records) {
-    // Parsear metadata
-    let metadata = {};
-    if (f.metadata) {
+      // 🔥 CARGAR FIBRAS DESDE ASYNCSTORAGE PRIMERO
+      console.log("\n2️⃣ CARGANDO FIBRAS:");
+      const asyncStorageKey = `@fibraoptica/fibers_project_${id}`;
+      console.log(`   📥 Intentando leer de AsyncStorage: "${asyncStorageKey}"`);
+      
+      let asyncStorageFibers = [];
       try {
-        metadata = JSON.parse(f.metadata);
-      } catch (e) {
-        console.error("Error parsing fiber metadata:", e);
+        const asyncData = await AsyncStorage.getItem(asyncStorageKey);
+        console.log(`   - Resultado de getItem (null): ${asyncData == null}`);
+        
+        if (asyncData) {
+          console.log(`   - Tamaño de datos: ${asyncData.length} bytes`);
+          try {
+            asyncStorageFibers = JSON.parse(asyncData);
+            console.log(`   ✅ JSON parseado correctamente`);
+            console.log(`   - Total items en AsyncStorage: ${asyncStorageFibers.length}`);
+            
+            if (asyncStorageFibers.length > 0) {
+              console.log(`   - Primeros 3 items:`);
+              asyncStorageFibers.slice(0, 3).forEach((item, idx) => {
+                const type = item.parentFiberId ? 'Buffer' : 'Fibra';
+                console.log(`      ${idx + 1}. ${item.label} [${type}]`);
+              });
+              if (asyncStorageFibers.length > 3) {
+                console.log(`      ... y ${asyncStorageFibers.length - 3} items más`);
+              }
+            }
+          } catch (parseError) {
+            console.error(`   ❌ Error parsing JSON:`, parseError);
+          }
+        } else {
+          console.log(`   ⚠️ No data in AsyncStorage para esta clave`);
+        }
+      } catch (asyncError) {
+        console.error(`   ❌ Error leyendo de AsyncStorage:`, asyncError);
       }
-    }
 
-    const buffers = await getFibersByProjectId(id, f.id);
-    dbFibers.push({
-      ...f,
-      threads: metadata.threads || [],
-      isSystemFiber: metadata.isSystemFiber || false,
-      buffers: buffers || [],
-    });
-  }
-}
+      // CARGAR FIBRAS DE BASE DE DATOS
+      console.log(`\n   📥 Intentando leer de Base de Datos...`);
+      let records = await getFibersByProjectId(id, null);
+      console.log(`   📦 Fibras principales desde DB: ${records?.length || 0}`);
+      
+      let dbFibers = [];
+      if (records && records.length > 0) {
+        for (let f of records) {
+          let metadata = {};
+          if (f.metadata) {
+            try {
+              metadata = JSON.parse(f.metadata);
+            } catch (e) {
+              console.error("   ❌ Error parsing fiber metadata:", e);
+            }
+          }
 
-      setFibers(dbFibers);
-      console.log("✅ Total fibers loaded:", dbFibers.length);
+          const buffers = await getFibersByProjectId(id, f.id);
+          dbFibers.push({
+            ...f,
+            threads: metadata.threads || [],
+            isSystemFiber: metadata.isSystemFiber || false,
+            buffers: buffers || [],
+          });
+        }
+        console.log(`   ✅ ${dbFibers.length} fibras cargadas de DB`);
+      } else {
+        console.log(`   ⚠️ No fibers found in database`);
+      }
+
+      // 🔥 DECIDIR QUÉ USAR: AsyncStorage o DB
+      console.log(`\n   🔄 DECISIÓN DE CARGA:`);
+      console.log(`      - AsyncStorage items: ${asyncStorageFibers.length}`);
+      console.log(`      - Database fibers: ${dbFibers.length}`);
+      
+      let fibersToUse = [];
+      if (asyncStorageFibers.length > 0) {
+        console.log(`   ✅ Usando datos de AsyncStorage (prioritario)`);
+        fibersToUse = asyncStorageFibers;
+      } else if (dbFibers.length > 0) {
+        console.log(`   ✅ Usando datos de Base de Datos (fallback)`);
+        fibersToUse = dbFibers;
+      } else {
+        console.log(`   ⚠️ No fibers found en ningún lado`);
+        fibersToUse = [];
+      }
+
+      setFibers(fibersToUse);
+      console.log(`   ✅ Total de fibras seteadas en state: ${fibersToUse.length}`);
 
       // Cargar información adicional
+      console.log(`\n3️⃣ CARGANDO INFORMACIÓN ADICIONAL:`);
       try {
         const units = await getUnitsInfo(id);
         if (units) {
+          console.log(`   ✅ Units info cargada`);
           setUnitsInfo({
             living_unit: units.living_unit?.toString() || "0",
             office_amenities: units.office_amenities?.toString() || "0",
@@ -643,12 +712,13 @@ const CreateProject = ({ navigation, route }) => {
           });
         }
       } catch (error) {
-        console.log("No units info found, using defaults");
+        console.log("   ⚠️ No units info found");
       }
 
       try {
         const projectTypeData = await getProjectType(id);
         if (projectTypeData) {
+          console.log(`   ✅ Project type cargado`);
           setProjectType({
             build_type: projectTypeData.build_type || 'MDU',
             job_type: projectTypeData.job_type || 'Residential',
@@ -656,11 +726,16 @@ const CreateProject = ({ navigation, route }) => {
           });
         }
       } catch (error) {
-        console.log("No project type found, using defaults");
+        console.log("   ⚠️ No project type found");
       }
 
+      console.log("\n✅ === CARGA DE PROYECTO COMPLETADA ===");
+      console.log("=".repeat(80) + "\n");
+
     } catch (error) {
-      console.log("❌ Error loading project data:", error);
+      console.error("\n❌ === ERROR EN CARGA DE PROYECTO ===");
+      console.error("Error:", error);
+      console.error("=".repeat(80) + "\n");
       Alert.alert(t("error") || "Error", t("failedToLoadProject") || "Failed to load project");
     } finally {
       setSaving(false);
@@ -886,120 +961,194 @@ const CreateProject = ({ navigation, route }) => {
 //   }
 // };
   
-// REEMPLAZA COMPLETAMENTE saveFibersToDatabase en CreateProject.js:
-
+// 🔥 REFACTORIZADO: saveFibersToDatabase con LOGS EXHAUSTIVOS para debugging
 const saveFibersToDatabase = async (currentProjectId) => {
+  const timestamp = new Date().toISOString();
   try {
-    console.log("💾 === INICIO GUARDADO FIBRAS ===");
-    console.log("📁 ProjectID recibido:", currentProjectId, "tipo:", typeof currentProjectId);
+    console.log("\n" + "=".repeat(80));
+    console.log("💾 === INICIANDO GUARDADO DE FIBRAS ===", timestamp);
+    console.log("=".repeat(80));
     
-    // 🔥 VERIFICACIÓN CRÍTICA
+    // VERIFICACIÓN 1: ProjectID
+    console.log("\n1️⃣ VERIFICACIÓN DE PROJECT ID:");
+    console.log(`   - Tipo: ${typeof currentProjectId}`);
+    console.log(`   - Valor: "${currentProjectId}"`);
+    console.log(`   - Nulo/Indefinido: ${currentProjectId == null}`);
+    console.log(`   - Vacío: ${currentProjectId === ''}`);
+    
     if (!currentProjectId) {
-      console.error("❌ ERROR CRÍTICO: currentProjectId es undefined/null");
-      console.error("❌ Estado actual:");
-      console.error("   - projectId del estado:", projectId);
-      console.error("   - isEditMode:", isEditMode);
-      console.error("   - createdProjId:", createdProjId);
+      console.error("❌ ERROR CRÍTICO: ProjectID es null/undefined");
+      console.error(`   Stack trace:`);
+      console.trace();
+      Alert.alert("Error", "No se pudo guardar las fibras - ID de proyecto no disponible");
       return;
     }
 
-    console.log("📊 Fibras a guardar:", fibers.length);
+    // VERIFICACIÓN 2: FIBRAS EN STATE
+    console.log("\n2️⃣ VERIFICACIÓN DE FIBRAS EN STATE:");
+    console.log(`   - Total de fibras en state: ${fibers.length}`);
+    console.log(`   - Tipo de fibers: ${typeof fibers}`);
     
-    // MOSTRAR TODAS LAS FIBRAS
-    fibers.forEach((fiber, index) => {
-      console.log(`  ${index + 1}. ${fiber.label} (ID: ${fiber.id || 'no-id'}, nodeId: ${fiber.nodeId})`);
+    if (!Array.isArray(fibers)) {
+      console.error("❌ ERROR: fibers no es un array");
+      return;
+    }
+
+    // Listar todas las fibras
+    let fiberCount = 0;
+    console.log("\n   📋 Listado de fibras:");
+    fibers.forEach((f, i) => {
+      const buffersInfo = f.buffers ? `${f.buffers.length} buffers` : "sin buffers";
+      const deletedInfo = f.deleted ? " [MARCADA COMO ELIMINADA]" : "";
+      console.log(`      ${i + 1}. ${f.label || 'SIN NOMBRE'} - ID: ${f.id || 'SIN ID'} (${buffersInfo})${deletedInfo}`);
+      if (!f.deleted) fiberCount++;
     });
+    console.log(`   - Fibras NO eliminadas: ${fiberCount}`);
     
-    const saveKey = `@project_${currentProjectId}_fibers`;
-    console.log("🔑 Clave de guardado:", saveKey);
+    // VERIFICACIÓN 3: PROCESAMIENTO DE FIBRAS
+    const fibersKey = `@fibraoptica/fibers_project_${currentProjectId}`;
+    console.log("\n3️⃣ INFORMACIÓN DE ALMACENAMIENTO:");
+    console.log(`   - Clave AsyncStorage: "${fibersKey}"`);
     
     const allFibersToSave = [];
+    let fiberProcessed = 0;
+    let bufferProcessed = 0;
 
-    // Procesar fibras principales
+    console.log("\n4️⃣ PROCESANDO FIBRAS:");
     for (const fiber of fibers) {
-      if (fiber.deleted) continue;
+      if (fiber.deleted) {
+        console.log(`   ⏭️  SALTANDO fibra eliminada: ${fiber.label}`);
+        continue;
+      }
 
+      fiberProcessed++;
       const fiberToSave = {
-        id: fiber.id || `fiber_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        id: fiber.id || uuidv4(),
         label: fiber.label,
         typeId: fiber.typeId,
         projectId: currentProjectId,
         nodeId: fiber.nodeId || null,
         parentFiberId: null,
-        metadata: JSON.stringify({
+        metadata: {
           threads: fiber.threads || [],
           isSystemFiber: fiber.isSystemFiber || false,
-          buffersCount: fiber.buffers?.length || 0
-        }),
+          buffersCount: fiber.buffers?.length || 0,
+          color: fiber.color || null
+        },
         createdDate: fiber.createdDate || new Date().toISOString(),
         modifiedDate: new Date().toISOString(),
         deleted: 0
       };
 
-      console.log(`➕ Fibra: ${fiberToSave.label}`);
+      console.log(`      ➕ FIBRA ${fiberProcessed}: ${fiberToSave.label}`);
+      console.log(`         ID: ${fiberToSave.id}`);
+      console.log(`         Project: ${fiberToSave.projectId}`);
+      console.log(`         Buffers en state: ${fiber.buffers?.length || 0}`);
+      
       allFibersToSave.push(fiberToSave);
 
       // Guardar buffers
       if (fiber.buffers && fiber.buffers.length > 0) {
+        console.log(`         🔹 PROCESANDO ${fiber.buffers.length} BUFFERS:`);
         for (const buffer of fiber.buffers) {
+          bufferProcessed++;
           const bufferToSave = {
-            id: buffer.id || `buffer_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            id: buffer.id || uuidv4(),
             label: buffer.label,
             typeId: buffer.typeId,
             projectId: currentProjectId,
             nodeId: buffer.nodeId || null,
             parentFiberId: fiberToSave.id,
-            metadata: JSON.stringify({
+            metadata: {
               threads: buffer.threads || [],
               isBuffer: true,
-              parentFiberLabel: fiber.label
-            }),
+              parentFiberLabel: fiber.label,
+              color: buffer.color || null
+            },
             createdDate: buffer.createdDate || new Date().toISOString(),
             modifiedDate: new Date().toISOString(),
             deleted: 0
           };
           
-          console.log(`  🔹 Buffer: ${bufferToSave.label}`);
+          console.log(`            🔹${bufferProcessed}. Buffer: ${bufferToSave.label} (ID: ${bufferToSave.id})`);
           allFibersToSave.push(bufferToSave);
         }
       }
     }
 
-    console.log("💾 Total a guardar:", allFibersToSave.length);
+    // VERIFICACIÓN 4: RESUMEN PRE-GUARDADO
+    console.log("\n5️⃣ RESUMEN PRE-GUARDADO:");
+    console.log(`   - Total de fibras procesadas: ${fiberProcessed}`);
+    console.log(`   - Total de buffers procesados: ${bufferProcessed}`);
+    console.log(`   - Total items a guardar: ${allFibersToSave.length}`);
     
-    // 🔥 GUARDAR EN ASYNCSTORAGE
-    try {
-      console.log("💾 Guardando en AsyncStorage...");
-      await AsyncStorage.setItem(saveKey, JSON.stringify(allFibersToSave));
-      
-      // VERIFICAR
-      const savedData = await AsyncStorage.getItem(saveKey);
-      if (savedData) {
-        const parsed = JSON.parse(savedData);
-        console.log(`✅ VERIFICACIÓN: ${parsed.length} fibras guardadas en ${saveKey}`);
-        
-        // Mostrar lo guardado
-        parsed.forEach((item, idx) => {
-          console.log(`  ${idx + 1}. ${item.label} (${item.parentFiberId ? 'Buffer' : 'Fibra'})`);
-        });
-      } else {
-        console.error("❌ VERIFICACIÓN FALLIDA: No se pudo leer después de guardar");
-      }
-      
-    } catch (storageError) {
-      console.error("❌ Error guardando en AsyncStorage:", storageError);
-      throw storageError;
+    if (allFibersToSave.length === 0) {
+      console.warn("⚠️  ADVERTENCIA: No hay items para guardar!");
     }
 
-    console.log("💾 === FIN GUARDADO FIBRAS ===");
+    // VERIFICACIÓN 5: INTENTANDO GUARDAR EN ASYNCSTORAGE
+    console.log("\n6️⃣ GUARDANDO EN ASYNCSTORAGE:");
+    console.log(`   - Iniciando AsyncStorage.setItem...`);
+    console.log(`   - Clave: "${fibersKey}"`);
+    console.log(`   - Tamaño de datos: ${JSON.stringify(allFibersToSave).length} bytes`);
+    
+    try {
+      await AsyncStorage.setItem(fibersKey, JSON.stringify(allFibersToSave));
+      console.log(`   ✅ AsyncStorage.setItem completó SIN ERROR`);
+    } catch (asyncError) {
+      console.error(`   ❌ ERROR en AsyncStorage.setItem:`, asyncError);
+      console.error(`   - Tipo de error: ${asyncError.name}`);
+      console.error(`   - Mensaje: ${asyncError.message}`);
+      throw asyncError;
+    }
+
+    // VERIFICACIÓN 6: VERIFICAR GUARDADO
+    console.log("\n7️⃣ VERIFICANDO GUARDADO:");
+    let verifyData;
+    try {
+      verifyData = await AsyncStorage.getItem(fibersKey);
+      console.log(`   ✅ AsyncStorage.getItem completó`);
+      console.log(`   - Datos recuperados (null/undefined): ${verifyData == null}`);
+      console.log(`   - Tamaño de datos: ${verifyData?.length || 0} bytes`);
+      
+      if (verifyData) {
+        const parsed = JSON.parse(verifyData);
+        console.log(`   ✅ JSON parseado correctamente`);
+        console.log(`   - Total items verificados: ${parsed.length}`);
+        
+        if (parsed.length > 0) {
+          console.log(`   - Primeros 3 items:`);
+          parsed.slice(0, 3).forEach((item, idx) => {
+            const type = item.parentFiberId ? 'Buffer' : 'Fibra';
+            console.log(`      ${idx + 1}. ${item.label} [${type}] (ID: ${item.id})`);
+          });
+          if (parsed.length > 3) {
+            console.log(`      ... y ${parsed.length - 3} items más`);
+          }
+        }
+      } else {
+        console.error(`   ❌ CRÍTICO: AsyncStorage.getItem retornó null/undefined`);
+      }
+    } catch (verifyError) {
+      console.error(`   ❌ ERROR durante verificación:`, verifyError);
+      console.error(`   - Tipo de error: ${verifyError.name}`);
+      console.error(`   - Mensaje: ${verifyError.message}`);
+    }
+    
+    console.log("\n✅ === GUARDADO DE FIBRAS COMPLETADO ===");
+    console.log("=".repeat(80) + "\n");
     
   } catch (error) {
-    console.error("❌ Error general guardando fibras:", error);
+    console.error("\n❌ === ERROR CRÍTICO EN GUARDADO DE FIBRAS ===");
+    console.error("Tipo de error:", error.name);
+    console.error("Mensaje:", error.message);
+    console.error("Stack:", error.stack);
+    console.error("=".repeat(80) + "\n");
     throw error;
   }
 };
 
-const handleInputChange = (field, value) => {
+  const handleInputChange = (field, value) => {
     setProjectData((prev) => ({
       ...prev,
       [field]: value,
@@ -1491,23 +1640,54 @@ const handleInputChange = (field, value) => {
           !node.deleted && (selectedNodesFilter.id === 0 || node.typeId === selectedNodesFilter.id)
         ));
 
-        // 🔥 GUARDAR FIBRAS - NUEVO
-      // await saveFibersToDatabase(projectId);
-      console.log("🔍 ANTES DE GUARDAR FIBRAS:");
-console.log("   - projectId:", projectId);
-console.log("   - projectToSave.id:", projectToSave?.id);
-// console.log("   - createdProjId:", createdProjId);
-
-// Determinar el ID correcto del proyecto
-const targetProjectId = projectId || projectToSave?.id || createdProjId;
-console.log("🔍 ID de proyecto a usar:", targetProjectId);
-
-if (targetProjectId) {
-  await saveFibersToDatabase(targetProjectId);
-} else {
-  console.error("❌ ERROR CRÍTICO: No hay projectId para guardar fibras");
-  Alert.alert("Error", "No se pudo guardar las fibras - ID de proyecto no disponible");
-}
+        // 🔥 GUARDAR FIBRAS Y CONFIGURACIONES EN MODO EDICIÓN
+        console.log("\n📦 === INICIANDO GUARDADO DE CONFIGURACIONES EN MODO EDICIÓN ===");
+        console.log(`📊 Estado actual:`);
+        console.log(`   - ProjectID: ${projectId}`);
+        console.log(`   - Fibers en state: ${fibers.length}`);
+        console.log(`   - Nodes en state: ${allNodes.length}`);
+        
+        console.log("\n0️⃣ Guardando NODOS...");
+        try {
+          await saveNodesToAsyncStorage(projectId);
+          console.log("✅ NODOS guardados");
+        } catch (nodeError) {
+          console.error("❌ Error al guardar NODOS:", nodeError);
+        }
+        
+        console.log("\n1️⃣ Guardando FIBRAS...");
+        try {
+          await saveFibersToDatabase(projectId);
+          console.log("✅ FIBRAS guardadas");
+        } catch (fiberError) {
+          console.error("❌ Error al guardar FIBRAS:", fiberError);
+        }
+        
+        console.log("\n2️⃣ Guardando CONFIGURACIONES DE DISPOSITIVOS...");
+        try {
+          await saveDeviceConfigurations(projectId);
+          console.log("✅ DISPOSITIVOS guardados");
+        } catch (deviceError) {
+          console.error("❌ Error al guardar DISPOSITIVOS:", deviceError);
+        }
+        
+        console.log("\n3️⃣ Guardando CONFIGURACIONES DE FIBRAS...");
+        try {
+          await saveFiberConfigurations(projectId);
+          console.log("✅ CONFIGURACIONES DE FIBRAS guardadas");
+        } catch (fiberConfigError) {
+          console.error("❌ Error al guardar CONFIGURACIONES DE FIBRAS:", fiberConfigError);
+        }
+        
+        console.log("\n4️⃣ Guardando CONEXIONES DE RED...");
+        try {
+          await saveNetworkConnections(projectId);
+          console.log("✅ CONEXIONES guardadas");
+        } catch (connError) {
+          console.error("❌ Error al guardar CONEXIONES:", connError);
+        }
+        
+        console.log("📦 === FIN GUARDADO DE CONFIGURACIONES EN MODO EDICIÓN ===\n");
 
       } else {
         // MODO CREACIÓN
@@ -1568,8 +1748,54 @@ if (targetProjectId) {
         setAllNodes(nodesWithIds);
         setNodes(nodesWithIds);
 
-        // 🔥 GUARDAR FIBRAS - NUEVO
-        await saveFibersToDatabase(projectId);
+        // 🔥 GUARDAR FIBRAS CON ID CORRECTO
+        console.log("\n📦 === INICIANDO GUARDADO DE CONFIGURACIONES EN MODO CREACIÓN ===");
+        console.log(`📊 Estado actual:`);
+        console.log(`   - ProjectID: ${projectToSave.id}`);
+        console.log(`   - Fibers en state: ${fibers.length}`);
+        console.log(`   - Nodes en state: ${nodesWithIds.length}`);
+        
+        console.log("\n0️⃣ Guardando NODOS...");
+        try {
+          await saveNodesToAsyncStorage(projectToSave.id);
+          console.log("✅ NODOS guardados");
+        } catch (nodeError) {
+          console.error("❌ Error al guardar NODOS:", nodeError);
+        }
+        
+        console.log("\n1️⃣ Guardando FIBRAS...");
+        try {
+          await saveFibersToDatabase(projectToSave.id);
+          console.log("✅ FIBRAS guardadas");
+        } catch (fiberError) {
+          console.error("❌ Error al guardar FIBRAS:", fiberError);
+        }
+        
+        console.log("\n2️⃣ Guardando CONFIGURACIONES DE DISPOSITIVOS...");
+        try {
+          await saveDeviceConfigurations(projectToSave.id);
+          console.log("✅ DISPOSITIVOS guardados");
+        } catch (deviceError) {
+          console.error("❌ Error al guardar DISPOSITIVOS:", deviceError);
+        }
+        
+        console.log("\n3️⃣ Guardando CONFIGURACIONES DE FIBRAS...");
+        try {
+          await saveFiberConfigurations(projectToSave.id);
+          console.log("✅ CONFIGURACIONES DE FIBRAS guardadas");
+        } catch (fiberConfigError) {
+          console.error("❌ Error al guardar CONFIGURACIONES DE FIBRAS:", fiberConfigError);
+        }
+        
+        console.log("\n4️⃣ Guardando CONEXIONES DE RED...");
+        try {
+          await saveNetworkConnections(projectToSave.id);
+          console.log("✅ CONEXIONES guardadas");
+        } catch (connError) {
+          console.error("❌ Error al guardar CONEXIONES:", connError);
+        }
+        
+        console.log("📦 === FIN GUARDADO DE CONFIGURACIONES EN MODO CREACIÓN ===\n");
 
         // Actualizar estado del proyecto
         setCreatedProjId(projectToSave.id);
@@ -1581,6 +1807,9 @@ if (targetProjectId) {
 
       console.log("✅ Project saved successfully!");
 
+      // 🔥 NUEVO: Verificar que los datos se guardaron correctamente
+      await verifyProjectDataPersistence(projectToSave?.id || projectId);
+
     } catch (error) {
       console.log("❌ Error saving project:", error);
       Alert.alert(
@@ -1589,6 +1818,48 @@ if (targetProjectId) {
       );
     } finally {
       setSaving(false);
+    }
+  };
+
+  // 🔥 NUEVO: Función para verificar persistencia de datos
+  const verifyProjectDataPersistence = async (projId) => {
+    try {
+      console.log("🔍 === VERIFICACIÓN DE PERSISTENCIA ===");
+      console.log("📁 Proyecto:", projId);
+      
+      if (!projId) {
+        console.warn("⚠️ Sin proyecto para verificar");
+        return;
+      }
+
+      // Verificar fibras
+      const fibersKey = `@fibraoptica/fibers_project_${projId}`;
+      const fiberData = await AsyncStorage.getItem(fibersKey);
+      const savedFibers = fiberData ? JSON.parse(fiberData) : [];
+      console.log(`📦 Fibras guardadas: ${savedFibers.length}`);
+      savedFibers.forEach((f, i) => {
+        console.log(`  ${i + 1}. ${f.label} ${f.parentFiberId ? '(Buffer)' : ''}`);
+      });
+
+      // Verificar dispositivos
+      const deviceKey = `@fibraoptica/devices_${projId}`;
+      const deviceData = await AsyncStorage.getItem(deviceKey);
+      const savedDevices = deviceData ? JSON.parse(deviceData) : [];
+      console.log(`🔧 Dispositivos guardados: ${savedDevices.length}`);
+
+      // Verificar conexiones
+      const connectionsKey = `@fibraoptica/connections_${projId}`;
+      const connData = await AsyncStorage.getItem(connectionsKey);
+      const savedConnections = connData ? JSON.parse(connData) : [];
+      console.log(`🔗 Conexiones guardadas: ${savedConnections.length}`);
+      savedConnections.forEach((c, i) => {
+        console.log(`  ${i + 1}. ${c.sourceNodeId} → ${c.targetNodeId}`);
+      });
+
+      console.log("✅ === VERIFICACIÓN COMPLETADA ===");
+      
+    } catch (error) {
+      console.error("❌ Error en verificación:", error);
     }
   };
 
@@ -1984,6 +2255,193 @@ if (targetProjectId) {
     setNodes(filtered);
     setSelectedNodesFilter(filter);
     setShowFilterNodesModal(false);
+  };
+
+  // 🔥 NUEVO: Guardar NODOS en AsyncStorage
+  const saveNodesToAsyncStorage = async (currentProjectId) => {
+    try {
+      console.log("💾 Guardando nodos en AsyncStorage...");
+      
+      if (!currentProjectId) {
+        console.warn("⚠️ ProjectID no disponible para nodos");
+        return;
+      }
+
+      const nodesKey = `@fibraoptica/nodes_project_${currentProjectId}`;
+      const nodesToSave = [];
+
+      // Guardar TODOS los nodos (excepto los marcados como deleted)
+      allNodes.forEach(node => {
+        if (!node.deleted) {
+          nodesToSave.push({
+            id: node.id || uuidv4(),
+            hash: node.hash,
+            label: node.label,
+            projectId: currentProjectId,
+            typeId: node.typeId,
+            typeName: node.typeName || "",
+            description: node.description || "",
+            devices: node.devices || [],
+            fusionLinks: node.fusionLinks || [],
+            metadata: node.metadata || {},
+            createdDate: node.createdDate || new Date().toISOString(),
+            modifiedDate: new Date().toISOString(),
+            deleted: 0
+          });
+        }
+      });
+
+      if (nodesToSave.length > 0) {
+        await AsyncStorage.setItem(nodesKey, JSON.stringify(nodesToSave));
+        console.log(`✅ Guardados ${nodesToSave.length} nodos en AsyncStorage`);
+      } else {
+        console.log("ℹ️ Sin nodos para guardar");
+      }
+      
+    } catch (error) {
+      console.error("❌ Error guardando nodos:", error);
+    }
+  };
+
+  // 🔥 NUEVO: Cargar NODOS desde AsyncStorage
+  const loadNodesFromAsyncStorage = async (currentProjectId) => {
+    try {
+      const nodesKey = `@fibraoptica/nodes_project_${currentProjectId}`;
+      const nodesData = await AsyncStorage.getItem(nodesKey);
+      
+      if (nodesData) {
+        const parsedNodes = JSON.parse(nodesData);
+        console.log(`📥 Nodos cargados desde AsyncStorage: ${parsedNodes.length}`);
+        return parsedNodes;
+      } else {
+        console.log("⚠️ No hay nodos en AsyncStorage");
+        return null;
+      }
+    } catch (error) {
+      console.error("❌ Error cargando nodos de AsyncStorage:", error);
+      return null;
+    }
+  };
+
+  // 🔥 NUEVO: Guardar DISPOSITIVOS en AsyncStorage
+  const saveDeviceConfigurations = async (currentProjectId) => {
+    try {
+      console.log("💾 Guardando configuraciones de dispositivos...");
+      
+      if (!currentProjectId) {
+        console.warn("⚠️ ProjectID no disponible para dispositivos");
+        return;
+      }
+
+      const deviceKey = `@fibraoptica/devices_${currentProjectId}`;
+      const deviceConfigs = [];
+
+      // Recolectar dispositivos de TODOS los nodos
+      allNodes.forEach(node => {
+        if (node.devices && node.devices.length > 0) {
+          node.devices.forEach(device => {
+            deviceConfigs.push({
+              id: device.id || uuidv4(),
+              nodeId: node.id || node.hash,
+              projectId: currentProjectId,
+              ...device,
+              createdDate: device.createdDate || new Date().toISOString(),
+              modifiedDate: new Date().toISOString()
+            });
+          });
+        }
+      });
+
+      if (deviceConfigs.length > 0) {
+        await AsyncStorage.setItem(deviceKey, JSON.stringify(deviceConfigs));
+        console.log(`✅ Guardados ${deviceConfigs.length} dispositivos`);
+      } else {
+        console.log("ℹ️ Sin dispositivos para guardar");
+      }
+      
+    } catch (error) {
+      console.error("❌ Error guardando dispositivos:", error);
+    }
+  };
+
+  // 🔥 NUEVO: Guardar CONFIGURACIONES DE FIBRA en AsyncStorage
+  const saveFiberConfigurations = async (currentProjectId) => {
+    try {
+      console.log("💾 Guardando configuraciones de fibra...");
+      
+      if (!currentProjectId) {
+        console.warn("⚠️ ProjectID no disponible para fibras");
+        return;
+      }
+
+      const fiberConfigKey = `@fibraoptica/fiber_config_${currentProjectId}`;
+      const fiberConfigs = [];
+
+      // Guardar configuración global de fibras del proyecto
+      fibers.forEach(fiber => {
+        if (!fiber.deleted) {
+          fiberConfigs.push({
+            id: fiber.id || uuidv4(),
+            projectId: currentProjectId,
+            fiberType: fiber.typeId,
+            label: fiber.label,
+            metadata: fiber.metadata || {},
+            createdDate: fiber.createdDate || new Date().toISOString()
+          });
+        }
+      });
+
+      if (fiberConfigs.length > 0) {
+        await AsyncStorage.setItem(fiberConfigKey, JSON.stringify(fiberConfigs));
+        console.log(`✅ Guardadas ${fiberConfigs.length} configuraciones de fibra`);
+      }
+      
+    } catch (error) {
+      console.error("❌ Error guardando configuraciones de fibra:", error);
+    }
+  };
+
+  // 🔥 NUEVO: Guardar CONEXIONES DE RED en AsyncStorage
+  const saveNetworkConnections = async (currentProjectId) => {
+    try {
+      console.log("💾 Guardando conexiones de red...");
+      
+      if (!currentProjectId) {
+        console.warn("⚠️ ProjectID no disponible para conexiones");
+        return;
+      }
+
+      const connectionsKey = `@fibraoptica/connections_${currentProjectId}`;
+      const allConnections = [];
+
+      // Recolectar todas las conexiones de los nodos
+      allNodes.forEach(node => {
+        if (node.fusionLinks && node.fusionLinks.length > 0) {
+          node.fusionLinks.forEach(link => {
+            allConnections.push({
+              id: link.id || uuidv4(),
+              projectId: currentProjectId,
+              sourceNodeId: node.id || node.hash,
+              targetNodeId: link.targetNodeId,
+              fiberCount: link.fiberCount || 1,
+              status: link.status || 'active',
+              metadata: link.metadata || {},
+              createdDate: link.createdDate || new Date().toISOString()
+            });
+          });
+        }
+      });
+
+      if (allConnections.length > 0) {
+        await AsyncStorage.setItem(connectionsKey, JSON.stringify(allConnections));
+        console.log(`✅ Guardadas ${allConnections.length} conexiones de red`);
+      } else {
+        console.log("ℹ️ Sin conexiones para guardar");
+      }
+      
+    } catch (error) {
+      console.error("❌ Error guardando conexiones:", error);
+    }
   };
 
   return (

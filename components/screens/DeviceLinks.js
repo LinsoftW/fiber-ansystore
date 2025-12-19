@@ -2482,6 +2482,7 @@ import { useDevice } from "../context/DeviceContext";
 import { useAdapter } from "@/api/contexts/DatabaseContext";
 
 import RNPickerSelect from "react-native-picker-select";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const DeviceLinks = ({ route, navigation }) => {
   const { getFibersByProjectId } = useAdapter()();
@@ -2765,8 +2766,13 @@ const DeviceLinks = ({ route, navigation }) => {
     return undefined;
   };
 
-  // Construir threads disponibles
-  const buildThreads = (fiber, threads) => {
+  // Construir threads disponibles - MEMOIZADO para evitar renders infinitos
+  const buildThreads = React.useCallback((fiber, threads) => {
+    if (!fiber) {
+      console.warn('⚠️ buildThreads llamado sin fiber');
+      return [];
+    }
+
     console.log('🔄 Construyendo threads para:', fiber?.label);
     
     if (!threads || !Array.isArray(threads)) {
@@ -2777,19 +2783,21 @@ const DeviceLinks = ({ route, navigation }) => {
       }));
     }
 
-    let tmp = threads.filter((x) => x.active === true);
+    let tmp = threads.filter((x) => x?.active === true);
     let result = [];
-    const links = deviceData.links || [];
+    const links = deviceData?.links || [];
 
     console.log('🔍 Threads activos:', tmp.length);
     console.log('🔍 Links existentes:', links.length);
 
-    tmp.forEach((t) => {
+    tmp.forEach((thread) => {
+      if (!thread?.number) return; // Protección contra threads sin number
+      
       let found = false;
-      const number = t.number;
+      const number = thread.number;
 
       for (let i = 0; i < links.length; i++) {
-        const lx = links[i].src;
+        const lx = links[i]?.src;
         if (lx && (lx.fiberId === fiber.id || lx.bufferId === fiber.id)) {
           if (lx.thread === number) {
             found = true;
@@ -2800,7 +2808,7 @@ const DeviceLinks = ({ route, navigation }) => {
       }
 
       if (!found) {
-        result.push(t);
+        result.push(thread);
       }
     });
 
@@ -2813,7 +2821,7 @@ const DeviceLinks = ({ route, navigation }) => {
 
     console.log('✅ Threads disponibles:', finalResult.length);
     return finalResult;
-  };
+  }, [deviceData?.links, t]);
 
   // Función para obtener color de contraste
   const getContrastColor = (hexColor) => {
@@ -2950,22 +2958,34 @@ const DeviceLinks = ({ route, navigation }) => {
 
   // Manejadores de cambios en los selectores
   const handleFiberChange = (value) => {
+    if (value === null || value === undefined) {
+      console.warn('⚠️ Fiber value inválido:', value);
+      setSrcLink({
+        fiber: null,
+        buffer: null,
+        thread: null,
+        threads: [],
+      });
+      return;
+    }
+
     console.log('🎯 Fiber seleccionado:', value);
-    const fiber = fibersData.find((x) => x.value === value);
+    const fiber = fibersData?.find((x) => x?.value === value);
     
     if (fiber) {
       console.log('🎯 Fiber encontrado:', fiber.label);
-      const threads = fiber.buffers && fiber.buffers.length <= 1 ? 
-        buildThreads(fiber, fiber.threads) : [];
+      const threads = fiber?.buffers && fiber.buffers.length <= 1 ? 
+        buildThreads(fiber, fiber?.threads) : [];
       
       console.log('🎯 Threads disponibles:', threads.length);
       
-      setSrcLink({
+      setSrcLink(prevState => ({
+        ...prevState,
         fiber: fiber,
         buffer: null,
         thread: null,
         threads: threads,
-      });
+      }));
     } else {
       console.log('❌ Fiber no encontrado con value:', value);
       setSrcLink({
@@ -2978,40 +2998,49 @@ const DeviceLinks = ({ route, navigation }) => {
   };
 
   const handleBufferChange = (value) => {
+    if (value === null || value === undefined) {
+      console.warn('⚠️ Buffer value inválido:', value);
+      return;
+    }
+
     console.log('🎯 Buffer seleccionado:', value);
-    if (!srcLink.fiber) {
+    if (!srcLink?.fiber) {
       console.log('❌ No hay fiber seleccionado');
       return;
     }
     
-    const buffer = srcLink.fiber.buffers.find((x) => x.value === value);
+    const buffer = srcLink.fiber?.buffers?.find((x) => x?.value === value);
     if (buffer) {
       console.log('🎯 Buffer encontrado:', buffer.label);
-      const threads = buildThreads(buffer, buffer.threads);
+      const threads = buildThreads(buffer, buffer?.threads);
       console.log('🎯 Threads disponibles para buffer:', threads.length);
       
-      setSrcLink({
-        ...srcLink,
+      setSrcLink(prevState => ({
+        ...prevState,
         buffer: buffer,
         thread: null,
         threads: threads,
-      });
+      }));
     } else {
       console.log('❌ Buffer no encontrado');
     }
   };
 
   const handleThreadChange = (value) => {
+    if (value === null || value === undefined) {
+      console.warn('⚠️ Thread value inválido:', value);
+      return;
+    }
     console.log('🎯 Thread seleccionado:', value);
-    setSrcLink({
-      ...srcLink,
+    setSrcLink(prevState => ({
+      ...prevState,
       thread: value,
-    });
+    }));
   };
 
-  // Guardar configuración del link
+  // Guardar configuración del link - PROTEGIDO contra crashes
   const handleSaveLink = () => {
-    if (!srcLink.fiber || srcLink.thread == null) {
+    if (!srcLink?.fiber || srcLink.thread == null) {
       Alert.alert(
         t("error") || "Error", 
         t("selectFiberAndThread") || "Por favor selecciona una fibra y un hilo"
@@ -3019,41 +3048,47 @@ const DeviceLinks = ({ route, navigation }) => {
       return;
     }
 
-    const links = deviceData.links || [];
-    const src = {
-      fiberId: srcLink.fiber.id,
-      bufferId: srcLink.buffer?.id || null,
-      thread: srcLink.thread,
-    };
+    try {
+      const links = deviceData?.links || [];
+      const src = {
+        fiberId: srcLink.fiber.id,
+        bufferId: srcLink.buffer?.id || null,
+        thread: srcLink.thread,
+      };
 
-    const existingIndex = links.findIndex((x) => x.port === selectedPort);
+      const existingIndex = links.findIndex((x) => x?.port === selectedPort);
 
-    const newLinks = [...links];
-    if (existingIndex === -1) {
-      newLinks.push({ port: selectedPort, src: src });
-    } else {
-      newLinks[existingIndex].src = src;
+      const newLinks = [...links];
+      if (existingIndex === -1) {
+        newLinks.push({ port: selectedPort, src: src });
+      } else {
+        newLinks[existingIndex].src = src;
+      }
+
+      setDeviceData(prevState => ({
+        ...prevState,
+        links: newLinks,
+      }));
+
+      console.log('💾 Link guardado:', {
+        port: selectedPort,
+        fiber: srcLink.fiber.label,
+        buffer: srcLink.buffer?.label,
+        thread: srcLink.thread
+      });
+
+      // Cerrar modal después de guardar
+      setShowLinkSetupModal(false);
+      setSrcLink({
+        fiber: null,
+        buffer: null,
+        thread: null,
+        threads: [],
+      });
+    } catch (error) {
+      console.error('❌ Error guardando link:', error);
+      Alert.alert("Error", "No se pudo guardar el enlace: " + error.message);
     }
-
-    setDeviceData({
-      ...deviceData,
-      links: newLinks,
-    });
-
-    console.log('💾 Link guardado:', {
-      port: selectedPort,
-      fiber: srcLink.fiber.label,
-      buffer: srcLink.buffer?.label,
-      thread: srcLink.thread
-    });
-
-    setShowLinkSetupModal(false);
-    setSrcLink({
-      fiber: null,
-      buffer: null,
-      thread: null,
-      threads: [],
-    });
   };
 
   // Cerrar modal sin guardar
@@ -3107,7 +3142,7 @@ const DeviceLinks = ({ route, navigation }) => {
     console.log('=== END DEBUG ===');
   };
 
-  // Cargar fibras - VERSIÓN CORREGIDA
+  // Cargar fibras - VERSIÓN CORREGIDA CON ASYNCSTORAGE
   useEffect(() => {
     const loadFibers = async () => {
       try {
@@ -3115,21 +3150,39 @@ const DeviceLinks = ({ route, navigation }) => {
         console.log('🔷 Cargando fibras para proyecto:', projectId);
         console.log('🔷 Nodo actual:', node?.label, 'Tipo:', node?.typeId);
         
-        let records = await getFibersByProjectId(projectId, null);
-        console.log('🔷 Fibras obtenidas de BD:', records.length);
+        // 🔥 CAMBIO: Leer de AsyncStorage PRIMERO
+        let records = [];
+        const asyncKey = `@fibraoptica/fibers_project_${projectId}`;
+        let asyncData = null;
         
-        if (records.length > 0) {
-          console.log('🔷 Primeras 3 fibras:', records.slice(0, 3).map(f => ({ 
-            id: f.id, 
-            label: f.label, 
-            nodeId: f.nodeId,
-            threads: f.threads 
-          })));
-        } else {
-          console.log('❌ NO SE OBTUVIERON FIBRAS DE LA BD');
+        try {
+          asyncData = await AsyncStorage.getItem(asyncKey);
+          if (asyncData) {
+            const allFibersFromAsync = JSON.parse(asyncData);
+            console.log('✅ Fibras cargadas de AsyncStorage:', allFibersFromAsync.length);
+            
+            // Filtrar solo fibras principales (parentFiberId = null)
+            records = allFibersFromAsync.filter(f => !f.parentFiberId);
+            console.log('🔷 Fibras principales (sin buffer parent):', records.length);
+          } else {
+            console.log('⚠️ No hay fibras en AsyncStorage');
+          }
+        } catch (asyncError) {
+          console.error('❌ Error leyendo AsyncStorage:', asyncError);
+        }
+        
+        // Fallback: Si no hay en AsyncStorage, intenta BD
+        if (records.length === 0) {
+          console.log('📥 Fallback: Intentando BD...');
+          records = await getFibersByProjectId(projectId, null);
+          console.log('🔷 Fibras obtenidas de BD (fallback):', records.length);
+        }
+        
+        if (records.length === 0) {
+          console.log('❌ NO SE OBTUVIERON FIBRAS (ni AsyncStorage ni BD)');
         }
 
-        // FILTRADO MÁS FLEXIBLE - SOLO PARA DEBUG, LUEGO AJUSTAR
+        // FILTRADO MÁS FLEXIBLE
         if (node && records.length > 0) {
           if (node.typeId === 4) {
             // UNIT: Mostrar fibra DROP específica
@@ -3139,54 +3192,91 @@ const DeviceLinks = ({ route, navigation }) => {
             console.log('🔷 Fibras después de filtrar para UNIT:', filteredRecords.length);
             records = filteredRecords;
           } else if (node.typeId === 1) {
-            // MDF: Excluir fibras DROP
-            console.log('🔷 Filtrando para MDF - excluyendo DROP fibers');
-            const filteredRecords = records.filter(f => !f.nodeId);
-            console.log('🔷 Fibras después de filtrar para MDF:', filteredRecords.length);
-            records = filteredRecords;
+            // MDF: Mostrar TODAS las fibras (no excluir)
+            console.log('🔷 Para MDF: Mostrando todas las fibras');
+            records = records;
+          } else if (node.typeId === 3) {
+            // Pedestal: Mostrar todas las fibras
+            console.log('🔷 Para Pedestal: Mostrando todas las fibras');
+            records = records;
           }
-          // Para IDF y Pedestal (typeId 2, 3) no filtramos
         }
 
         // PROCESAR ESTRUCTURA DE DATOS PARA PICKERS
+        // Parse AsyncStorage data ONCE (outside loop to avoid repeated parsing)
+        let allFibersFromAsync = [];
+        if (asyncData) {
+          try {
+            allFibersFromAsync = JSON.parse(asyncData);
+            console.log('✅ Datos AsyncStorage parseados una sola vez:', allFibersFromAsync.length);
+          } catch (e) {
+            console.error('❌ Error parseando AsyncStorage:', e);
+          }
+        }
+
         const processedRecords = [];
         
         for (let i = 0; i < records.length; i++) {
           const fiber = records[i];
           
-          // Asegurar que tenga threads
-          if (!fiber.threads) {
-            fiber.threads = Array.from({length: 12}, (_, index) => ({
+          // 🔥 CAMBIO: Usar threads del objeto, no crear ficticio
+          let threads = fiber.metadata?.threads || fiber.threads || [];
+          if (threads.length === 0) {
+            threads = Array.from({length: 12}, (_, index) => ({
               number: index + 1,
               active: true
             }));
           }
+          console.log(`📊 Threads de ${fiber.label}: ${threads.length}`);
 
-          // Obtener buffers hijos
+          // Obtener buffers hijos - primero de AsyncStorage
           let buffers = [{ 
             ...fiber, 
             value: fiber.id || fiber.hash,
             label: fiber.label || `Fibra ${i + 1}`,
-            key: `fiber-${fiber.id || fiber.hash}`,
+            key: `fiber-${fiber.id || fiber.hash}-main`,
+            threads: threads
           }];
           
           try {
-            let children = await getFibersByProjectId(projectId, fiber.id);
-            console.log(`🔷 Buffers hijos para ${fiber.label}:`, children.length);
+            let children = [];
             
-            const childBuffers = children.map((b, idx) => ({
-              ...b,
-              value: b.id || b.hash,
-              label: b.label || `Buffer ${idx + 1}`,
-              key: `buffer-${b.id || b.hash}`,
-              // Asegurar threads para buffers también
-              threads: b.threads || Array.from({length: 12}, (_, index) => ({
-                number: index + 1,
-                active: true
-              }))
-            }));
+            // 🔥 CAMBIO: Leer buffers de AsyncStorage primero (sin reparsear)
+            if (allFibersFromAsync && allFibersFromAsync.length > 0) {
+              children = allFibersFromAsync.filter(f => f.parentFiberId === fiber.id);
+              if (children.length > 0) {
+                console.log(`✅ Buffers de ${fiber.label} desde AsyncStorage:`, children.length);
+              }
+            }
+            
+            // Fallback a BD
+            if (children.length === 0) {
+              children = await getFibersByProjectId(projectId, fiber.id);
+              if (children.length > 0) {
+                console.log(`📥 Buffers de ${fiber.label} desde BD (fallback):`, children.length);
+              }
+            }
+            
+            const childBuffers = children.map((b, idx) => {
+              const bufferThreads = b.metadata?.threads || b.threads || [];
+              if (bufferThreads.length === 0) {
+                bufferThreads.push(...Array.from({length: 12}, (_, index) => ({
+                  number: index + 1,
+                  active: true
+                })));
+              }
+              
+              return {
+                ...b,
+                value: b.id || b.hash,
+                label: b.label || `Buffer ${idx + 1}`,
+                key: `buffer-${b.id || b.hash}-${fiber.id}`,
+                threads: bufferThreads
+              };
+            });
 
             buffers = [...buffers, ...childBuffers];
+            console.log(`📦 Total items para ${fiber.label} (fibra + ${childBuffers.length} buffers):`, buffers.length);
           } catch (error) {
             console.error('Error cargando buffers:', error);
           }
@@ -3197,6 +3287,7 @@ const DeviceLinks = ({ route, navigation }) => {
             value: fiber.id || fiber.hash,
             label: fiber.label || `Fibra ${i + 1}`,
             key: `fiber-${fiber.id || fiber.hash}`,
+            threads: threads
           });
         }
 

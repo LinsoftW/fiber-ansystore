@@ -1815,208 +1815,150 @@ const FusionLink = ({ route, navigation }) => {
 const loadProjectFibers = async () => {
   try {
     setIsLoading(true);
-    console.log('🚨 === FUSIONLINK DEBUG COMPLETO ===');
-    console.log('🚨 ProjectID:', projectId);
-    console.log('🚨 Nodo:', node?.label);
-    console.log('🚨 Params completos:', JSON.stringify(route.params));
+    console.log('� FusionLink - Cargando fibras para proyecto:', projectId);
+    console.log('🔷 Nodo:', node?.label, 'Tipo:', node?.typeId);
+    
+    let records = [];
+    
+    // 🔥 CAMBIO: Leer de AsyncStorage primero (patrón @fibraoptica/fibers_project_{projectId})
+    const asyncKey = `@fibraoptica/fibers_project_${projectId}`;
+    let asyncData = null;
+    
+    try {
+      asyncData = await AsyncStorage.getItem(asyncKey);
+      if (asyncData) {
+        const allFibersFromAsync = JSON.parse(asyncData);
+        console.log('✅ Fibras cargadas de AsyncStorage:', allFibersFromAsync.length);
+        
+        // Filtrar solo fibras principales (parentFiberId = null)
+        records = allFibersFromAsync.filter(f => !f.parentFiberId);
+        console.log('🔷 Fibras principales (sin buffer parent):', records.length);
+      } else {
+        console.log('⚠️ No hay fibras en AsyncStorage');
+      }
+    } catch (asyncError) {
+      console.error('❌ Error leyendo AsyncStorage:', asyncError);
+    }
+    
+    // Fallback: Si no hay en AsyncStorage, intenta BD
+    if (records.length === 0) {
+      console.log('📥 Fallback: Intentando BD...');
+      records = await getFibersByProjectId(projectId, null);
+      console.log('🔷 Fibras obtenidas de BD (fallback):', records.length);
+    }
+    
+    if (records.length === 0) {
+      console.log('❌ NO SE OBTUVIERON FIBRAS (ni AsyncStorage ni BD)');
+      setFibersData([]);
+      return;
+    }
 
-    // 1. LISTAR TODAS LAS CLAVES DE ASYNCSTORAGE
-    console.log('🔍 PASO 1: Listando todas las claves...');
-    const allKeys = await AsyncStorage.getAllKeys();
-    console.log(`🔍 Total claves: ${allKeys.length}`);
-    
-    // Filtrar claves relevantes
-    const fiberKeys = allKeys.filter(k => 
-      k.toLowerCase().includes('fiber') || 
-      k.includes('project') ||
-      k.includes('Project')
-    );
-    
-    console.log(`🔍 Claves relevantes: ${fiberKeys.length}`);
-    fiberKeys.forEach(key => {
-      console.log(`  📍 ${key}`);
-    });
-
-    // 2. BUSCAR CLAVES CON EL PATRÓN DEL PROJECTID
-    console.log(`\n🔍 PASO 2: Buscando projectId ${projectId}...`);
-    const keysWithProjectId = allKeys.filter(k => k.includes(projectId.toString()));
-    console.log(`🔍 Claves con projectId: ${keysWithProjectId.length}`);
-    keysWithProjectId.forEach(key => {
-      console.log(`  🔑 ${key}`);
-    });
-
-    // 3. BUSCAR ESPECÍFICAMENTE LA CLAVE QUE DEBERÍA EXISTIR
-    console.log(`\n🔍 PASO 3: Buscando clave exacta...`);
-    const expectedKey = `@project_${projectId}_fibers`;
-    console.log(`🔍 Clave esperada: ${expectedKey}`);
-    
-    const exactData = await AsyncStorage.getItem(expectedKey);
-    console.log(`🔍 Datos en clave exacta: ${exactData ? 'ENCONTRADOS' : 'NO ENCONTRADOS'}`);
-    
-    if (exactData) {
+    // Parse AsyncStorage data ONCE (outside loop to avoid repeated parsing)
+    let allFibersFromAsync = [];
+    if (asyncData) {
       try {
-        const fibers = JSON.parse(exactData);
-        console.log(`🔍 ${fibers.length} fibras encontradas:`);
-        fibers.forEach((fiber, idx) => {
-          console.log(`  ${idx + 1}. ${fiber.label || 'Sin label'} (ID: ${fiber.id}, parent: ${fiber.parentFiberId})`);
-        });
+        allFibersFromAsync = JSON.parse(asyncData);
+        console.log('✅ Datos AsyncStorage parseados para buffers:', allFibersFromAsync.length);
       } catch (e) {
-        console.error(`🔍 Error parseando:`, e);
+        console.error('❌ Error parseando AsyncStorage:', e);
       }
     }
 
-    // 4. BUSCAR EN TODAS LAS CLAVES DE FIBRAS
-    console.log(`\n🔍 PASO 4: Buscando en todas las claves de fibras...`);
-    for (const key of fiberKeys) {
+    // PROCESAR ESTRUCTURA DE DATOS PARA PICKERS
+    const processedRecords = [];
+    
+    for (let i = 0; i < records.length; i++) {
+      const fiber = records[i];
+      
+      // 🔥 CAMBIO: Usar threads del objeto, no crear ficticio
+      let threads = fiber.metadata?.threads || fiber.threads || [];
+      if (threads.length === 0) {
+        threads = Array.from({length: 12}, (_, index) => ({
+          number: index + 1,
+          active: true
+        }));
+      }
+      console.log(`📊 Threads de ${fiber.label}: ${threads.length}`);
+
+      // Obtener buffers hijos - primero de AsyncStorage
+      let buffers = [{ 
+        ...fiber, 
+        value: fiber.id || fiber.hash,
+        label: fiber.label || `Fibra ${i + 1}`,
+        key: `fiber-${fiber.id || fiber.hash}-main`,
+        threads: threads
+      }];
+      
       try {
-        const value = await AsyncStorage.getItem(key);
-        if (value) {
-          const data = JSON.parse(value);
-          if (Array.isArray(data) && data.length > 0) {
-            // Verificar si alguna fibra tiene este projectId
-            const hasThisProject = data.some(fiber => 
-              fiber.projectId === projectId || 
-              fiber.projectId === parseInt(projectId) ||
-              key.includes(projectId.toString())
-            );
-            
-            if (hasThisProject) {
-              console.log(`🔍 ¡ENCONTRADO! Clave: ${key}`);
-              console.log(`🔍 ${data.length} fibras en esta clave:`);
-              data.forEach((fiber, idx) => {
-                console.log(`  ${idx + 1}. ${fiber.label} (projectId: ${fiber.projectId})`);
-              });
-            }
+        let children = [];
+        
+        // 🔥 CAMBIO: Leer buffers de AsyncStorage primero (sin reparsear)
+        if (allFibersFromAsync && allFibersFromAsync.length > 0) {
+          children = allFibersFromAsync.filter(f => f.parentFiberId === fiber.id);
+          if (children.length > 0) {
+            console.log(`✅ Buffers de ${fiber.label} desde AsyncStorage:`, children.length);
           }
         }
-      } catch (e) {
-        // Ignorar errores de parseo
-      }
-    }
-
-    // 5. BUSCAR CLAVES CON PATRÓN "fiberConfig_"
-    console.log(`\n🔍 PASO 5: Buscando claves fiberConfig_...`);
-    const fiberConfigKeys = allKeys.filter(k => k.includes('fiberConfig_'));
-    console.log(`🔍 Claves fiberConfig_: ${fiberConfigKeys.length}`);
-    
-    for (const key of fiberConfigKeys) {
-      console.log(`  🔎 Examinando: ${key}`);
-      const value = await AsyncStorage.getItem(key);
-      if (value) {
-        try {
-          const data = JSON.parse(value);
-          console.log(`    Tipo: ${Array.isArray(data) ? `Array (${data.length})` : typeof data}`);
-        } catch (e) {
-          console.log(`    Error parseando`);
+        
+        // Fallback a BD
+        if (children.length === 0) {
+          children = await getFibersByProjectId(projectId, fiber.id);
+          if (children.length > 0) {
+            console.log(`📥 Buffers de ${fiber.label} desde BD (fallback):`, children.length);
+          }
         }
-      }
-    }
+        
+        const childBuffers = children.map((b, idx) => {
+          const bufferThreads = b.metadata?.threads || b.threads || [];
+          if (bufferThreads.length === 0) {
+            bufferThreads.push(...Array.from({length: 12}, (_, index) => ({
+              number: index + 1,
+              active: true
+            })));
+          }
+          
+          return {
+            ...b,
+            value: b.id || b.hash,
+            label: b.label || `Buffer ${idx + 1}`,
+            key: `buffer-${b.id || b.hash}-${fiber.id}`,
+            threads: bufferThreads
+          };
+        });
 
-    // 6. BUSCAR EL ÚLTIMO PROJECTID GUARDADO
-    console.log(`\n🔍 PASO 6: Buscando último projectId guardado...`);
-    const projectKeys = allKeys.filter(k => k.includes('@project_'));
-    console.log(`🔍 Claves de proyectos: ${projectKeys.length}`);
-    
-    if (projectKeys.length > 0) {
-      console.log(`🔍 Últimas claves de proyecto:`);
-      projectKeys.slice(-5).forEach(key => {
-        console.log(`  📂 ${key}`);
+        buffers = [...buffers, ...childBuffers];
+        console.log(`📦 Total items para ${fiber.label} (fibra + ${childBuffers.length} buffers):`, buffers.length);
+      } catch (error) {
+        console.error('Error cargando buffers:', error);
+      }
+
+      processedRecords.push({
+        ...fiber,
+        buffers: buffers,
+        value: fiber.id || fiber.hash,
+        label: fiber.label || `Fibra ${i + 1}`,
+        key: `fiber-${fiber.id || fiber.hash}`,
+        threads: threads
       });
-      
-      // Leer la última clave
-      const lastKey = projectKeys[projectKeys.length - 1];
-      const lastValue = await AsyncStorage.getItem(lastKey);
-      if (lastValue) {
-        try {
-          const lastData = JSON.parse(lastValue);
-          console.log(`🔍 Datos en ${lastKey}: ${lastData.length} fibras`);
-        } catch (e) {
-          console.error(`🔍 Error parseando último:`, e);
-        }
-      }
     }
 
-    console.log('🚨 === FIN DEBUG ===');
+    console.log('🔷 Registros procesados para pickers:', processedRecords.length);
+    console.log('🔷 Estructura final:', processedRecords.map(f => ({
+      label: f.label,
+      value: f.value,
+      buffers: f.buffers?.length || 0
+    })));
 
-    // 🔥 SI NO ENCUENTRA NADA, CREAR FIBRAS DE PRUEBA TEMPORALES
-    if (!exactData) {
-      console.log('⚠️ No se encontraron fibras, creando datos de prueba...');
-      
-      const testFibers = [
-        {
-          id: `test_${Date.now()}_1`,
-          label: '12F_TEST_1',
-          typeId: '12F',
-          projectId: projectId,
-          nodeId: null,
-          parentFiberId: null,
-          metadata: JSON.stringify({
-            threads: Array.from({length: 12}, (_, i) => ({
-              number: i + 1,
-              color: getColorByIndex(i),
-              active: true,
-              inUse: false
-            })),
-            isSystemFiber: false
-          }),
-          buffers: []
-        },
-        {
-          id: `test_${Date.now()}_2`,
-          label: '24F_TEST_1',
-          typeId: '24F',
-          projectId: projectId,
-          nodeId: null,
-          parentFiberId: null,
-          metadata: JSON.stringify({
-            threads: Array.from({length: 12}, (_, i) => ({
-              number: i + 1,
-              color: getColorByIndex(i),
-              active: true,
-              inUse: false
-            })),
-            isSystemFiber: false
-          }),
-          buffers: [
-            {
-              id: `test_buffer_${Date.now()}_1`,
-              label: '24F_TEST_1_Buffer1',
-              typeId: '12F',
-              projectId: projectId,
-              nodeId: null,
-              parentFiberId: `test_${Date.now()}_2`,
-              metadata: JSON.stringify({
-                threads: Array.from({length: 12}, (_, i) => ({
-                  number: i + 1,
-                  color: getColorByIndex(i),
-                  active: true,
-                  inUse: false
-                })),
-                isBuffer: true
-              })
-            }
-          ]
-        }
-      ];
-
-      // Guardar fibras de prueba
-      await AsyncStorage.setItem(expectedKey, JSON.stringify(testFibers));
-      console.log(`✅ Fibras de prueba guardadas en ${expectedKey}`);
-      
-      // Procesar las fibras de prueba
-      const processedTestFibers = processFibersForUI(testFibers, projectId);
-      setFibersData(applyNodeFilter(processedTestFibers, node));
-      
-    } else {
-      // Procesar las fibras reales encontradas
-      const fibers = JSON.parse(exactData);
-      const processedFibers = processFibersForUI(fibers, projectId);
-      setFibersData(applyNodeFilter(processedFibers, node));
+    // Cargar link existente si aplica
+    if (link) {
+      loadExistingLinkData(processedRecords);
     }
+    
+    setFibersData(processedRecords);
 
   } catch (error) {
-    console.error('❌ Error en debug completo:', error);
-    Alert.alert("Error", "No se pudieron cargar las fibras");
+    console.error('❌ Error crítico cargando fibras:', error);
+    Alert.alert("Error", "No se pudieron cargar las fibras: " + error.message);
   } finally {
     setIsLoading(false);
   }
